@@ -66,8 +66,8 @@ def _push_state_and_video_to_drive(service, folder_id: str, video_path: Path, ca
             drive_storage.upload_file(service, folder_id, path.name, path.read_bytes(), "application/json")
 
 
-st.set_page_config(page_title="Generador de datos curiosos", page_icon="🎬")
-st.title("🎬 Generador de videos de datos curiosos")
+st.set_page_config(page_title="Generador de datos curiosos")
+st.title("Generador de videos de datos curiosos")
 st.caption(
     "Cada clic genera un video vertical listo para TikTok (voz IA, fotos reales, "
     "personaje animado y subtítulos) y lo guarda en tu carpeta de Google Drive."
@@ -84,7 +84,7 @@ if "gdrive" not in st.secrets:
 _write_local_secrets()
 FOLDER_ID = st.secrets["gdrive"]["folder_id"]
 
-if st.button("🎲 Generar video nuevo", type="primary"):
+if st.button("Generar video nuevo", type="primary"):
     try:
         service = drive_storage.get_service(
             st.secrets["gdrive"]["client_id"],
@@ -107,7 +107,7 @@ if st.button("🎲 Generar video nuevo", type="primary"):
 
         st.video(str(out_path))
         st.download_button(
-            "⬇️ Descargar video",
+            "Descargar video",
             data=out_path.read_bytes(),
             file_name=out_path.name,
             mime="video/mp4",
