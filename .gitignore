@@ -1,3 +1,22 @@
+# --- Reglas propias del proyecto ---
+# Legado del avatar fotorrealista (no usado por el pipeline actual, muy pesado)
+avatar_env/
+weights/
+avatar_face.png
+
+# Estado local / secretos - en la nube viven en Drive y en Streamlit secrets
+tmp/
+output/
+config.json
+groq_config.json
+tiktok_config.json
+tiktok_tokens.json
+uploaded.json
+used_facts.json
+used_wikipedia.json
+generation.log
+
+# --- Plantilla estándar de Python (GitHub) ---
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
