@@ -251,63 +251,69 @@ elijas, para que sobrevivan aunque la app se reinicie en la nube.
 > no es para automatización en segundo plano), ni subir a TikTok (esa parte
 > sigue siendo solo para tu PC — ver sección de subida más arriba).
 
-### Paso 1: Crear la cuenta de servicio de Google (una sola vez)
+> ⚠️ **Nota importante**: la primera versión de esta guía usaba una "cuenta
+> de servicio" de Google, pero **Google no permite que las cuentas de
+> servicio creen archivos en un Drive personal** (solo tienen cuota de
+> almacenamiento en cuentas de Google Workspace con "Shared Drives"). Por
+> eso el método correcto de abajo autentica **como tú mismo** en su lugar.
 
-Esto le da permiso a la app para leer/escribir en tu carpeta de Drive, sin
-usar tu propia cuenta de Google directamente.
+### Paso 1: Crear las credenciales OAuth de Google (una sola vez)
 
 1. Ve a https://console.cloud.google.com/ y crea un proyecto nuevo (o usa
    uno existente).
 2. En el buscador de arriba, busca **"Google Drive API"** y haz clic en
    **Habilitar**.
 3. Ve a **"Credenciales"** (menú izquierdo) → **"Crear credenciales"** →
-   **"Cuenta de servicio"**.
-4. Dale un nombre (ej. "generador-videos") y crea la cuenta.
-5. Entra a la cuenta de servicio recién creada → pestaña **"Claves"** →
-   **"Agregar clave"** → **"Crear clave nueva"** → tipo **JSON** → Crear.
-   Se descarga un archivo `.json` — **guárdalo, lo necesitas en el paso 4**.
-6. Copia el **email** de la cuenta de servicio (se ve como
-   `algo@tu-proyecto.iam.gserviceaccount.com`, aparece en la lista de
-   cuentas de servicio).
+   **"ID de cliente de OAuth"**.
+   - Si te pide configurar la "Pantalla de consentimiento" primero, elige
+     tipo **"Externo"**, pon cualquier nombre, tu correo, y guarda (no hace
+     falta publicarla, con dejarla en modo "Prueba" alcanza).
+4. Tipo de aplicación: **"Aplicación de escritorio"**. Créala.
+5. Descarga el JSON de esa credencial (ícono de descarga) y guárdalo en la
+   carpeta del proyecto como `oauth_client.json`.
 
-### Paso 2: Compartir tu carpeta de Drive con esa cuenta
-
-1. Abre tu carpeta de Drive para los videos (ej. "Nuevos Videos").
-2. Clic derecho → **Compartir** → pega el email de la cuenta de servicio
-   (del paso 1.6) → dale rol **Editor** → Enviar.
-3. Copia el **ID de la carpeta** desde la URL:
-   `https://drive.google.com/drive/folders/`**`ESTE-ES-EL-ID`**`?usp=sharing`
-
-### Paso 3: Subir el proyecto a GitHub
-
-Streamlit Cloud despliega directo desde un repositorio de GitHub.
+### Paso 2: Autorizar tu cuenta (una sola vez, en tu PC)
 
 ```powershell
-cd C:\Users\USUARIO\Documents\ChicoTuf\generador-videos
-git init
-git add .
-git commit -m "Generador de videos de datos curiosos"
+cd C:\Users\USUARIO\Documents\GitHub\Generator-Videos
+python google_drive_auth.py
 ```
 
-Luego crea un repositorio nuevo en https://github.com/new (puede ser
-privado) y sigue las instrucciones que te da GitHub para subir lo que ya
-tienes en local (`git remote add origin ...` y `git push`). Gracias al
-`.gitignore` ya incluido, no se sube nada pesado ni ninguna clave secreta.
+Se abre tu navegador — inicia sesión con la cuenta dueña de la carpeta de
+Drive y acepta el permiso. Al terminar, la terminal imprime algo así:
 
-### Paso 4: Desplegar en Streamlit Cloud
+```
+[gdrive]
+folder_id = "TU_ID_DE_CARPETA_AQUI"
+client_id = "...apps.googleusercontent.com"
+client_secret = "..."
+refresh_token = "..."
+```
+
+**Guarda ese bloque completo**, lo necesitas en el paso 4.
+
+### Paso 3: Compartir la carpeta de Drive y obtener su ID
+
+Si la carpeta ya es tuya (como "Nuevos Videos"), no necesitas compartir
+nada — ya es tuya. Solo copia el **ID de la carpeta** desde la URL:
+
+`https://drive.google.com/drive/folders/`**`ESTE-ES-EL-ID`**`?usp=sharing`
+
+Y reemplázalo en el `folder_id` del bloque que copiaste en el paso 2.
+
+### Paso 4: Configurar los Secrets en Streamlit Cloud
 
 1. Entra a https://share.streamlit.io/ e inicia sesión con tu cuenta de
-   GitHub.
-2. **"New app"** → elige tu repositorio → archivo principal: `app.py` → Deploy.
-3. Mientras carga (o desde el panel de la app → **"Settings" → "Secrets"**),
-   pega esto, completando con tus datos:
+   GitHub. **"New app"** → elige el repositorio `Generator-Videos` →
+   archivo principal: `app.py` → Deploy.
+2. Desde el panel de la app → **"Settings" → "Secrets"**, pega:
 
    ```toml
    [gdrive]
-   folder_id = "EL-ID-DE-TU-CARPETA-DEL-PASO-2"
-   service_account = '''
-   PEGA_AQUI_TODO_EL_CONTENIDO_DEL_JSON_DEL_PASO_1
-   '''
+   folder_id = "EL-ID-DE-TU-CARPETA"
+   client_id = "EL-CLIENT-ID-DEL-PASO-2"
+   client_secret = "EL-CLIENT-SECRET-DEL-PASO-2"
+   refresh_token = "EL-REFRESH-TOKEN-DEL-PASO-2"
 
    [pexels]
    api_key = "TU_API_KEY_DE_PEXELS"
@@ -319,7 +325,7 @@ tienes en local (`git remote add origin ...` y `git push`). Gracias al
    (Las API keys de Pexels y Groq son las mismas que ya tienes en
    `config.json` / `groq_config.json` — ábrelos y copia el valor.)
 
-4. Guarda los secrets — la app se reinicia sola y queda lista.
+3. Guarda los secrets — la app se reinicia sola y queda lista.
 
 ### Limitaciones a tener en cuenta
 
@@ -328,11 +334,12 @@ tienes en local (`git remote add origin ...` y `git push`). Gracias al
   de segundos/un minuto).
 - La app se "duerme" tras un rato sin uso — la primera vez que la abres
   después de dormir tarda unos segundos extra en despertar, es normal.
-- Esto **no lo pude probar de punta a punta** porque requiere que tú crees
-  la cuenta de servicio de Google (paso 1) — sí probé que la app carga
-  correctamente y muestra un error claro si faltan los secrets, pero la
-  subida real a tu carpeta de Drive solo la puedes confirmar tú una vez
-  sigas los pasos de arriba.
+- El `refresh_token` no expira mientras uses la app regularmente, pero si
+  Google lo invalida (por ejemplo si revocas el acceso desde tu cuenta de
+  Google), hay que correr `google_drive_auth.py` de nuevo y actualizar el
+  secret en Streamlit.
+- Nunca subas `oauth_client.json` a GitHub — ya está en el `.gitignore`,
+  pero verifícalo si algo falla.
 
 ## Nota legal importante
 

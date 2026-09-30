@@ -8,9 +8,9 @@ Configuración necesaria en Streamlit Cloud → Settings → Secrets:
 
     [gdrive]
     folder_id = "1EXJMY_OpD7rXxePU7YUqua75eWmSKeag"
-    service_account = '''
-    { ... contenido completo del JSON de la cuenta de servicio ... }
-    '''
+    client_id = "..."
+    client_secret = "..."
+    refresh_token = "..."
 
     [pexels]
     api_key = "..."
@@ -18,8 +18,9 @@ Configuración necesaria en Streamlit Cloud → Settings → Secrets:
     [groq]
     api_key = "..."
 
-Ver README.md para la guía paso a paso de cómo crear la cuenta de servicio
-de Google y compartir la carpeta de Drive con ella.
+Los 3 valores de [gdrive] (además de folder_id) salen de correr
+google_drive_auth.py una sola vez en tu PC. Ver README.md para la guía
+paso a paso.
 """
 
 import json
@@ -74,18 +75,22 @@ st.caption(
 
 if "gdrive" not in st.secrets:
     st.error(
-        "Falta configurar los secrets de Google Drive (`[gdrive]` con `folder_id` y "
-        "`service_account`). Ver README.md, sección 'Desplegar en Streamlit Cloud'."
+        "Falta configurar los secrets de Google Drive (`[gdrive]` con `folder_id`, "
+        "`client_id`, `client_secret` y `refresh_token`). Ver README.md, sección "
+        "'Desplegar en Streamlit Cloud'."
     )
     st.stop()
 
 _write_local_secrets()
 FOLDER_ID = st.secrets["gdrive"]["folder_id"]
-SERVICE_ACCOUNT_INFO = json.loads(st.secrets["gdrive"]["service_account"])
 
 if st.button("🎲 Generar video nuevo", type="primary"):
     try:
-        service = drive_storage.get_service(SERVICE_ACCOUNT_INFO)
+        service = drive_storage.get_service(
+            st.secrets["gdrive"]["client_id"],
+            st.secrets["gdrive"]["client_secret"],
+            st.secrets["gdrive"]["refresh_token"],
+        )
 
         with st.status("Generando video...", expanded=True) as status:
             st.write("Sincronizando registro de datos ya usados desde Drive...")

@@ -5,24 +5,33 @@ used_wikipedia.json) sobrevivan aunque la app en la nube (Streamlit Cloud)
 se reinicie y borre su disco local — Drive actúa como almacenamiento
 persistente externo.
 
-Requiere una cuenta de servicio de Google Cloud con acceso a la API de
-Drive, compartida como "Editor" en la carpeta de destino. Ver README.md
-para la guía paso a paso de cómo crearla.
+IMPORTANTE: se autentica como TU cuenta de Google (OAuth con refresh
+token), no como una cuenta de servicio — las cuentas de servicio no tienen
+cuota de almacenamiento propia y no pueden crear archivos en un Drive
+personal. Ver google_drive_auth.py para obtener el refresh token una vez.
 """
 
 import io
 
-from google.oauth2 import service_account
+from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload, MediaIoBaseUpload
 
 SCOPES = ["https://www.googleapis.com/auth/drive"]
+TOKEN_URI = "https://oauth2.googleapis.com/token"
 
 
-def get_service(service_account_info: dict):
-    """Crea el cliente de la API de Drive a partir del JSON de la cuenta de
-    servicio (tal como se guarda en Streamlit secrets)."""
-    creds = service_account.Credentials.from_service_account_info(service_account_info, scopes=SCOPES)
+def get_service(client_id: str, client_secret: str, refresh_token: str):
+    """Crea el cliente de la API de Drive autenticado como el usuario dueño
+    del Drive (a partir de su refresh token, ver google_drive_auth.py)."""
+    creds = Credentials(
+        token=None,
+        refresh_token=refresh_token,
+        token_uri=TOKEN_URI,
+        client_id=client_id,
+        client_secret=client_secret,
+        scopes=SCOPES,
+    )
     return build("drive", "v3", credentials=creds)
 
 
