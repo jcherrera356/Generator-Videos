@@ -20,10 +20,20 @@ import json
 import sys
 from pathlib import Path
 
+# La consola de Windows a veces usa una codificación antigua (cp1252) que no
+# soporta acentos ni flechas: sin esto, el print() de éxito puede tumbar el
+# script justo al final, después de ya haber iniciado sesión.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
+
 from google_auth_oauthlib.flow import InstalledAppFlow
 
 BASE_DIR = Path(__file__).resolve().parent
 CLIENT_SECRET_FILE = BASE_DIR / "oauth_client.json"
+RESULT_FILE = BASE_DIR / "gdrive_secrets_RESULTADO.txt"
 SCOPES = ["https://www.googleapis.com/auth/drive"]
 
 
@@ -38,12 +48,21 @@ def main() -> None:
     client_config = json.loads(CLIENT_SECRET_FILE.read_text(encoding="utf-8"))
     client_info = client_config.get("installed") or client_config.get("web")
 
-    print("\n[OK] Autorización completada. Pega esto en Streamlit → Settings → Secrets:\n")
-    print("[gdrive]")
-    print(f'folder_id = "TU_ID_DE_CARPETA_AQUI"')
-    print(f'client_id = "{client_info["client_id"]}"')
-    print(f'client_secret = "{client_info["client_secret"]}"')
-    print(f'refresh_token = "{creds.refresh_token}"')
+    block = (
+        "[gdrive]\n"
+        'folder_id = "TU_ID_DE_CARPETA_AQUI"\n'
+        f'client_id = "{client_info["client_id"]}"\n'
+        f'client_secret = "{client_info["client_secret"]}"\n'
+        f'refresh_token = "{creds.refresh_token}"\n'
+    )
+
+    # Se guarda en un archivo ADEMAS de imprimirse, por si la consola vuelve
+    # a fallar - este archivo NO se sube a git (ver .gitignore).
+    RESULT_FILE.write_text(block, encoding="utf-8")
+
+    print("\n[OK] Autorizacion completada. Pega esto en Streamlit -> Settings -> Secrets:\n")
+    print(block)
+    print(f"(Tambien quedo guardado en {RESULT_FILE.name} por si acaso)")
 
 
 if __name__ == "__main__":
