@@ -9,6 +9,8 @@ tmp/
 output/
 config.json
 groq_config.json
+rawg_config.json
+used_games.json
 tiktok_config.json
 tiktok_tokens.json
 uploaded.json

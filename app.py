@@ -1,9 +1,9 @@
 """
-App de Streamlit: dos botones que generan un video nuevo (usando el mismo
-pipeline de generate_video.py) — uno con un dato de Wikipedia, otro con el
-banco local (facts_bank.json) — y lo guardan en una carpeta de Google
-Drive, junto con el registro de "no repetir", para que sobrevivan aunque
-esta app se reinicie en la nube.
+App de Streamlit: tres botones que generan un video nuevo (usando el mismo
+pipeline de generate_video.py) — Wikipedia, el banco local (facts_bank.json)
+o videojuegos (API de RAWG) — y lo guardan en una carpeta de Google Drive,
+junto con el registro de "no repetir", para que sobrevivan aunque esta app
+se reinicie en la nube.
 
 Configuración necesaria en Streamlit Cloud → Settings → Secrets:
 
@@ -17,6 +17,9 @@ Configuración necesaria en Streamlit Cloud → Settings → Secrets:
     api_key = "..."
 
     [groq]
+    api_key = "..."
+
+    [rawg]
     api_key = "..."
 
 Los 3 valores de [gdrive] (además de folder_id) salen de correr
@@ -48,6 +51,10 @@ def _write_local_secrets() -> None:
     if "groq" in st.secrets:
         (BASE_DIR / "groq_config.json").write_text(
             json.dumps({"groq_api_key": st.secrets["groq"]["api_key"]}), encoding="utf-8"
+        )
+    if "rawg" in st.secrets:
+        (BASE_DIR / "rawg_config.json").write_text(
+            json.dumps({"rawg_api_key": st.secrets["rawg"]["api_key"]}), encoding="utf-8"
         )
 
 
@@ -122,7 +129,7 @@ def _generate_and_upload(source: str) -> None:
         raise
 
 
-col1, col2 = st.columns(2)
+col1, col2, col3 = st.columns(3)
 with col1:
     st.subheader("Desde Wikipedia")
     st.caption("Un dato al azar, recién traído de Wikipedia (sin repetir).")
@@ -131,8 +138,14 @@ with col2:
     st.subheader("Desde el banco local")
     st.caption("Un dato elegido del banco fijo facts_bank.json (sin repetir).")
     local_clicked = st.button("Generar con banco local", type="secondary", use_container_width=True)
+with col3:
+    st.subheader("Videojuegos")
+    st.caption("Un juego al azar con sus propias capturas reales (API de RAWG, sin repetir).")
+    games_clicked = st.button("Generar sobre videojuegos", type="secondary", use_container_width=True)
 
 if wiki_clicked:
     _generate_and_upload(source="wikipedia")
 elif local_clicked:
     _generate_and_upload(source="local")
+elif games_clicked:
+    _generate_and_upload(source="games")

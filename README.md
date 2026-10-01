@@ -35,23 +35,59 @@ ver sección de subida abajo). Junto a cada video se guarda un archivo `.txt`
 del mismo nombre con el título y los hashtags sugeridos para esa publicación
 — ábrelo y copia/pega directamente en TikTok al subir el video.
 
-## De dónde sale cada dato (Wikipedia + banco local, sin repetir)
+## De dónde sale cada dato (Wikipedia, banco local o videojuegos — sin repetir)
 
-Cada video tiene, al azar, **50% de probabilidad** de usar un dato curioso
-recién traído de la **API pública de Wikipedia** (artículo aleatorio, sin
-API key) y **50%** de usar el banco fijo `facts_bank.json`. Ambas fuentes
-llevan su propio registro de qué ya se usó para no repetir:
+`generate_video.main(source=...)` acepta tres fuentes (la app de Streamlit
+tiene un botón para cada una):
 
-- Wikipedia → `used_wikipedia.json` (últimos 500 artículos usados).
-- Banco local → `used_facts.json` (se reinicia solo cuando ya usaste los 35).
+- `"wikipedia"` — un artículo aleatorio de la **API pública de Wikipedia**
+  (sin API key). Registro de usados: `used_wikipedia.json`.
+- `"local"` — el banco fijo `facts_bank.json` (35 datos escritos a mano).
+  Registro: `used_facts.json` (se reinicia solo al agotarlos).
+- `"games"` — un videojuego al azar de la **API de RAWG**, con sus propias
+  capturas de pantalla reales (ver sección de RAWG más abajo). Registro:
+  `used_games.json`.
+- `"auto"` (el que usa `python generate_video.py` sin argumentos, por
+  `generar_video.bat`) — **50% Wikipedia / 50% banco local**, al azar.
 
-Si Wikipedia no responde (sin internet, artículo muy corto/aburrido tras
-varios intentos, etc.), cae automáticamente al banco local — el video nunca
-falla por esto. Puedes ajustar la proporción cambiando
-`WIKIPEDIA_PROBABILITY` en `generate_video.py` (0.0 = solo banco local,
-1.0 = solo Wikipedia). Los datos de Wikipedia usan la categoría `general`
-para el ícono de respaldo (ver `visuals.py`, función `_icon_general`) ya que
-pueden ser sobre cualquier tema.
+Las tres fuentes caen automáticamente al banco local si fallan (sin
+internet, sin API key configurada, sin resultados nuevos tras varios
+intentos, etc.) — el video nunca falla por esto. Puedes ajustar la
+proporción de `"auto"` cambiando `WIKIPEDIA_PROBABILITY` en
+`generate_video.py`. Los datos de Wikipedia usan la categoría `general`
+para el ícono de respaldo (ver `visuals.py`) ya que pueden ser sobre
+cualquier tema.
+
+## Videojuegos (API gratuita de RAWG)
+
+Para el botón/fuente `"games"`, cada video trae un juego al azar (de entre
+los mejor calificados, para evitar juegos oscuros/poco interesantes), con
+su descripción, calificación, Metascore, y **hasta 4 capturas de pantalla
+reales del juego** — no se usa Pexels para estos, las imágenes vienen
+directo de RAWG.
+
+Para activarlo:
+
+1. Entra a https://rawg.io/apidocs y crea una cuenta gratuita (puedes
+   usar "Continue with Steam" si ya tienes cuenta de Steam, es solo un
+   método de login más — no es obligatorio ni riesgoso, RAWG es un sitio
+   confiable y conocido en la comunidad de videojuegos).
+2. Genera tu API key gratuita (hasta 20,000 solicitudes/mes).
+3. Pégala en `rawg_config.json`:
+   ```json
+   {"rawg_api_key": "TU_API_KEY_AQUI"}
+   ```
+
+### Nota legal de RAWG (atribución obligatoria)
+
+El plan gratuito de RAWG es para **uso no comercial**, y sus términos
+piden mencionar "RAWG" como fuente con un link activo donde se use su
+data/imágenes. Por eso cada video de esta fuente agrega automáticamente
+una línea de atribución al archivo `.txt` de título/hashtags:
+`Datos e imágenes de videojuegos: RAWG (https://rawg.io)` — inclúyela en
+la descripción del video al publicarlo. Si tu canal supera 100,000
+usuarios activos/mes o 500,000 vistas de página al mes, sus términos
+piden contactarlos para un licenciamiento comercial distinto.
 
 ## Título y hashtags sugeridos (IA, Groq)
 
@@ -320,10 +356,13 @@ Y reemplázalo en el `folder_id` del bloque que copiaste en el paso 2.
 
    [groq]
    api_key = "TU_API_KEY_DE_GROQ"
+
+   [rawg]
+   api_key = "TU_API_KEY_DE_RAWG"
    ```
 
-   (Las API keys de Pexels y Groq son las mismas que ya tienes en
-   `config.json` / `groq_config.json` — ábrelos y copia el valor.)
+   (Las API keys son las mismas que ya tienes en `config.json` /
+   `groq_config.json` / `rawg_config.json` — ábrelos y copia el valor.)
 
 3. Guarda los secrets — la app se reinicia sola y queda lista.
 
