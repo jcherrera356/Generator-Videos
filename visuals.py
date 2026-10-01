@@ -133,6 +133,18 @@ def _icon_general(draw: ImageDraw.ImageDraw) -> None:
         draw.line([x1, y1, x2, y2], fill=(255, 255, 255, 255), width=10)
 
 
+def _icon_videojuegos(draw: ImageDraw.ImageDraw) -> None:
+    """Control de videojuegos simplificado."""
+    cx, cy = 320, 350
+    draw.rounded_rectangle([cx - 160, cy - 70, cx + 160, cy + 70], radius=60, fill=(90, 90, 100, 255))
+    # cruceta izquierda
+    draw.rectangle([cx - 125, cy - 15, cx - 85, cy + 15], fill=(230, 230, 235, 255))
+    draw.rectangle([cx - 115, cy - 25, cx - 95, cy + 25], fill=(230, 230, 235, 255))
+    # botones derecha
+    for dx, dy, color in [(90, -20, (230, 90, 90)), (120, 10, (90, 170, 230)), (60, 10, (230, 200, 90)), (90, 35, (110, 200, 120))]:
+        draw.ellipse([cx + dx - 14, cy + dy - 14, cx + dx + 14, cy + dy + 14], fill=(*color, 255))
+
+
 _ICON_DRAWERS = {
     "espacio": _icon_espacio,
     "oceano": _icon_oceano,
@@ -144,6 +156,7 @@ _ICON_DRAWERS = {
     "clima": _icon_clima,
     "comida": _icon_comida,
     "general": _icon_general,
+    "videojuegos": _icon_videojuegos,
 }
 
 

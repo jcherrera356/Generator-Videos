@@ -46,6 +46,7 @@ from PIL import Image, ImageEnhance, ImageFilter
 
 import groq_client
 import pexels_photos
+import rawg_games
 import visuals
 import wikipedia_facts
 
@@ -146,12 +147,26 @@ def pick_fact_from_wikipedia() -> dict:
     return pick_fact_from_local()
 
 
+def pick_fact_from_games() -> dict:
+    """Elige un dato sobre un videojuego (API de RAWG), con sus propias
+    fotos reales ya incluidas. Si RAWG falla (sin API key, sin internet,
+    etc.), cae al banco local para no interrumpir la generación."""
+    game_fact = rawg_games.fetch_unused_game()
+    if game_fact:
+        return game_fact
+    print("[!] No se pudo traer un dato nuevo de RAWG, se usa el banco local.")
+    return pick_fact_from_local()
+
+
 def pick_fact(source: str = "auto") -> dict:
     """source: "wikipedia" (siempre Wikipedia, con respaldo al banco local
-    si falla), "local" (siempre el banco fijo), o "auto" (por defecto: al
-    azar entre las dos según WIKIPEDIA_PROBABILITY, como antes)."""
+    si falla), "local" (siempre el banco fijo), "games" (siempre RAWG, con
+    el mismo respaldo), o "auto" (por defecto: al azar entre Wikipedia y
+    local según WIKIPEDIA_PROBABILITY, como antes)."""
     if source == "wikipedia":
         return pick_fact_from_wikipedia()
+    if source == "games":
+        return pick_fact_from_games()
     if source == "local":
         return pick_fact_from_local()
 
@@ -521,9 +536,13 @@ def generate_caption(fact: dict) -> tuple[str, list[str]]:
     return title, hashtags
 
 
-def save_caption_file(video_path: Path, title: str, hashtags: list[str]) -> Path:
+def save_caption_file(video_path: Path, title: str, hashtags: list[str], fact: dict | None = None) -> Path:
     caption_path = video_path.with_suffix(".txt")
     content = f"{title}\n\n{' '.join(hashtags)}\n"
+    if fact and fact.get("category") == "videojuegos":
+        # Requisito del plan gratuito de RAWG: atribuir la fuente con un
+        # link activo donde se use su data/imágenes.
+        content += "\nDatos e imágenes de videojuegos: RAWG (https://rawg.io)\n"
     caption_path.write_text(content, encoding="utf-8")
     return caption_path
 
@@ -551,11 +570,17 @@ def main(source: str = "auto") -> Path:
 
     segments = split_script_segments(intro, fact["text"], outro, words)
     seg_times = segment_times(segments, words, duration)
-    photos = pexels_photos.fetch_topic_photos(fact.get("keywords", fact["category"]), len(seg_times))
-    if photos:
-        print(f"[+] {len(photos)} foto(s) real(es) obtenida(s) ({fact.get('keywords')})")
+
+    if fact.get("photos"):
+        # Ya vienen incluidas (ej. capturas reales de RAWG) - no hace falta Pexels.
+        photos = fact["photos"]
+        print(f"[+] {len(photos)} foto(s) real(es) ya incluida(s) con el dato ({fact.get('keywords')})")
     else:
-        print(f"[+] Sin fotos reales disponibles, se usará el ícono ilustrado ({fact['category']})")
+        photos = pexels_photos.fetch_topic_photos(fact.get("keywords", fact["category"]), len(seg_times))
+        if photos:
+            print(f"[+] {len(photos)} foto(s) real(es) obtenida(s) ({fact.get('keywords')})")
+        else:
+            print(f"[+] Sin fotos reales disponibles, se usará el ícono ilustrado ({fact['category']})")
 
     bg_png = TMP_DIR / "bg.png"
     make_background_source(photos).save(bg_png)
@@ -584,7 +609,11 @@ def main(source: str = "auto") -> Path:
     render_final(bg_video, topic_video, topic_mask, char_dir, mixed_audio, ass_path, out_path)
 
     title, hashtags = generate_caption(fact)
-    caption_path = save_caption_file(out_path, title, hashtags)
+    if fact.get("category") == "videojuegos":
+        for extra_tag in ("#videojuegos", "#gaming"):
+            if extra_tag not in hashtags:
+                hashtags.append(extra_tag)
+    caption_path = save_caption_file(out_path, title, hashtags, fact)
 
     print(f"[OK] Video listo: {out_path}")
     print(f"[OK] Título/hashtags sugeridos ({caption_path.name}):")
