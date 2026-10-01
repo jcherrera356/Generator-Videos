@@ -27,10 +27,13 @@ from pathlib import Path
 import requests
 from PIL import Image
 
+import groq_client
+
 BASE_DIR = Path(__file__).resolve().parent
 CONFIG_FILE = BASE_DIR / "rawg_config.json"
 USED_FILE = BASE_DIR / "used_games.json"
 API_BASE = "https://api.rawg.io/api"
+WIKI_USER_AGENT = "ChicoTuf-GeneradorVideos/1.0 (uso personal)"
 MAX_TRACKED = 500
 
 
@@ -83,6 +86,115 @@ def _fetch_screenshots(api_key: str, game_id: int, fallback_image: str | None, l
     return images
 
 
+def _fetch_wikipedia_extract(name: str) -> str | None:
+    """Busca el juego en Wikipedia (primero en español, luego en inglés como
+    respaldo) y devuelve el extracto del resumen, o None si no encuentra nada
+    razonable. Se usa solo como contexto extra para la IA, no se muestra tal
+    cual (puede venir en inglés)."""
+    for lang, hint in (("es", "videojuego"), ("en", "video game")):
+        try:
+            search = requests.get(
+                f"https://{lang}.wikipedia.org/w/api.php",
+                params={"action": "opensearch", "search": f"{name} {hint}", "limit": 1, "format": "json"},
+                headers={"User-Agent": WIKI_USER_AGENT},
+                timeout=10,
+            )
+            search.raise_for_status()
+            titles = search.json()[1]
+            if not titles:
+                continue
+            title = titles[0].replace(" ", "_")
+            summary = requests.get(
+                f"https://{lang}.wikipedia.org/api/rest_v1/page/summary/{title}",
+                headers={"User-Agent": WIKI_USER_AGENT},
+                timeout=10,
+            )
+            summary.raise_for_status()
+            extract = (summary.json().get("extract") or "").strip()
+            if extract and len(extract) > 80:
+                return extract
+        except requests.RequestException:
+            continue
+    return None
+
+
+def _build_curious_text(
+    name: str,
+    year: str,
+    genres: list[str],
+    platforms: list[str],
+    developers: list[str],
+    rating: float | None,
+    metacritic: int | None,
+    description_en: str,
+    wiki_extract: str | None,
+) -> str | None:
+    """Usa Groq para traducir y sintetizar toda la info (en inglés y/o
+    español) en un dato curioso natural, en vez de pegar texto en inglés sin
+    traducir o repetir siempre la misma plantilla de estadísticas."""
+    context_lines = [f"Juego: {name}"]
+    if year:
+        context_lines.append(f"Año de lanzamiento: {year}")
+    if genres:
+        context_lines.append(f"Género(s): {', '.join(genres)}")
+    if developers:
+        context_lines.append(f"Desarrollador(es): {', '.join(developers)}")
+    if platforms:
+        context_lines.append(f"Plataformas: {', '.join(platforms)}")
+    if rating:
+        context_lines.append(f"Calificación de los jugadores: {rating}/5")
+    if metacritic:
+        context_lines.append(f"Metascore: {metacritic}")
+    if description_en:
+        context_lines.append(f"Descripción (en inglés, de RAWG): {description_en}")
+    if wiki_extract:
+        context_lines.append(f"Extracto de Wikipedia: {wiki_extract}")
+
+    system_prompt = (
+        "Eres un redactor de 'datos curiosos' sobre videojuegos para TikTok, en "
+        "español neutro. Te paso información en inglés y/o español sobre un "
+        "juego; tu trabajo es traducir y resumir en 2 a 4 oraciones naturales y "
+        "curiosas (nunca una ficha técnica ni una lista). Prioriza curiosidades "
+        "reales si aparecen en la información: historia de desarrollo, récords, "
+        "polémicas, easter eggs, cifras de ventas o impacto cultural. Varía la "
+        "redacción y el inicio de cada respuesta, no uses siempre la misma "
+        "estructura. No inventes datos que no estén en la información dada. "
+        "Responde SOLO con el texto final en español, sin comillas, sin "
+        "encabezados ni explicaciones."
+    )
+    return groq_client.chat(system_prompt, "\n".join(context_lines), max_tokens=220)
+
+
+def _fallback_text(
+    name: str,
+    year: str,
+    genres: list[str],
+    platforms: list[str],
+    developers: list[str],
+    rating: float | None,
+    metacritic: int | None,
+) -> str:
+    """Respaldo sin IA (si Groq no está configurado o falla): menos rico que
+    la versión con IA, pero varía según qué datos haya disponibles en vez de
+    repetir siempre la misma plantilla."""
+    pieces = [f'"{name}"']
+    details = []
+    if genres:
+        details.append(f"un juego de {', '.join(g.lower() for g in genres)}")
+    if year:
+        details.append(f"lanzado en {year}")
+    if developers:
+        details.append(f"desarrollado por {', '.join(developers)}")
+    pieces.append(" es " + ", ".join(details) + "." if details else ".")
+    if rating:
+        pieces.append(f" Los jugadores lo califican con {rating}/5.")
+    if metacritic:
+        pieces.append(f" Tiene un Metascore de {metacritic}.")
+    if platforms:
+        pieces.append(f" Está disponible en {', '.join(platforms)}.")
+    return "".join(pieces)
+
+
 def fetch_unused_game(max_attempts: int = 8) -> dict | None:
     """Devuelve un dato (mismo formato que facts_bank.json, más una lista
     de fotos reales ya descargadas) sobre un videojuego no usado antes."""
@@ -114,23 +226,23 @@ def fetch_unused_game(max_attempts: int = 8) -> dict | None:
         except requests.RequestException:
             detail = {}
 
-        description = (detail.get("description_raw") or "").replace("\n", " ").strip()
-        text_desc = ". ".join(description.split(". ")[:3]).strip()
-        if text_desc and not text_desc.endswith("."):
-            text_desc += "."
-
+        description_en = (detail.get("description_raw") or "").replace("\n", " ").strip()[:1200]
         name = game.get("name", "este juego")
         year = (game.get("released") or "")[:4]
         rating = game.get("rating")
         metacritic = game.get("metacritic")
+        genres = [g["name"] for g in detail.get("genres") or game.get("genres") or []]
+        developers = [d["name"] for d in detail.get("developers") or []]
+        platforms = [p["platform"]["name"] for p in detail.get("platforms") or game.get("platforms") or []]
 
-        intro = f'"{name}"' + (f" salió en {year}. " if year else ". ")
-        if rating:
-            intro += f"Tiene una calificación de {rating}/5 de los jugadores. "
-        if metacritic:
-            intro += f"Su Metascore es de {metacritic}. "
+        wiki_extract = _fetch_wikipedia_extract(name)
+        full_text = _build_curious_text(
+            name, year, genres, platforms, developers, rating, metacritic, description_en, wiki_extract
+        )
+        if not full_text:
+            full_text = _fallback_text(name, year, genres, platforms, developers, rating, metacritic)
 
-        full_text = (intro + text_desc).strip()
+        full_text = full_text.strip()
         if len(full_text) < 60:
             continue
 
