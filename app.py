@@ -1,8 +1,9 @@
 """
-App de Streamlit: un botón que genera un video nuevo (usando el mismo
-pipeline de generate_video.py) y lo guarda en una carpeta de Google Drive
-— junto con el registro de "no repetir" — para que sobrevivan aunque esta
-app se reinicie en la nube.
+App de Streamlit: dos botones que generan un video nuevo (usando el mismo
+pipeline de generate_video.py) — uno con un dato de Wikipedia, otro con el
+banco local (facts_bank.json) — y lo guardan en una carpeta de Google
+Drive, junto con el registro de "no repetir", para que sobrevivan aunque
+esta app se reinicie en la nube.
 
 Configuración necesaria en Streamlit Cloud → Settings → Secrets:
 
@@ -84,7 +85,8 @@ if "gdrive" not in st.secrets:
 _write_local_secrets()
 FOLDER_ID = st.secrets["gdrive"]["folder_id"]
 
-if st.button("Generar video nuevo", type="primary"):
+
+def _generate_and_upload(source: str) -> None:
     try:
         service = drive_storage.get_service(
             st.secrets["gdrive"]["client_id"],
@@ -97,7 +99,7 @@ if st.button("Generar video nuevo", type="primary"):
             _sync_state_from_drive(service, FOLDER_ID)
 
             st.write("Eligiendo dato, generando voz, fotos y personaje animado (1-3 min)...")
-            out_path = generate_video.main()
+            out_path = generate_video.main(source=source)
             caption_path = out_path.with_suffix(".txt")
 
             st.write("Subiendo el video y el registro actualizado a Google Drive...")
@@ -118,3 +120,19 @@ if st.button("Generar video nuevo", type="primary"):
     except Exception as exc:
         st.error(f"Ocurrió un error generando el video: {exc}")
         raise
+
+
+col1, col2 = st.columns(2)
+with col1:
+    st.subheader("Desde Wikipedia")
+    st.caption("Un dato al azar, recién traído de Wikipedia (sin repetir).")
+    wiki_clicked = st.button("Generar con Wikipedia", type="primary", use_container_width=True)
+with col2:
+    st.subheader("Desde el banco local")
+    st.caption("Un dato elegido del banco fijo facts_bank.json (sin repetir).")
+    local_clicked = st.button("Generar con banco local", type="secondary", use_container_width=True)
+
+if wiki_clicked:
+    _generate_and_upload(source="wikipedia")
+elif local_clicked:
+    _generate_and_upload(source="local")

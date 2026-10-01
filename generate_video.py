@@ -119,19 +119,9 @@ def save_used(used: list[str]) -> None:
     USED_FILE.write_text(json.dumps(used, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def pick_fact() -> dict:
-    """Elige un dato: la mitad de las veces intenta traer uno nuevo y al
-    azar desde Wikipedia (sin repetir artículos ya usados); si eso falla
-    (sin internet, sin resultados nuevos, etc.) o le tocó el otro 50%,
-    usa el banco local (facts_bank.json), también sin repetir hasta
-    agotarlo.
-    """
-    if random.random() < WIKIPEDIA_PROBABILITY:
-        wiki_fact = wikipedia_facts.fetch_unused_fact()
-        if wiki_fact:
-            return wiki_fact
-        print("[!] No se pudo traer un dato nuevo de Wikipedia, se usa el banco local.")
-
+def pick_fact_from_local() -> dict:
+    """Elige un dato del banco fijo (facts_bank.json), sin repetir hasta
+    agotarlo (ahí se reinicia el registro y vuelve a empezar)."""
     facts = load_facts()
     used = load_used()
     remaining = [f for f in facts if f["id"] not in used]
@@ -142,6 +132,32 @@ def pick_fact() -> dict:
     used.append(fact["id"])
     save_used(used)
     return fact
+
+
+def pick_fact_from_wikipedia() -> dict:
+    """Elige un dato nuevo y al azar desde Wikipedia (sin repetir artículos
+    ya usados). Si Wikipedia falla (sin internet, sin resultados nuevos
+    tras varios intentos, etc.), cae al banco local para no interrumpir
+    la generación del video."""
+    wiki_fact = wikipedia_facts.fetch_unused_fact()
+    if wiki_fact:
+        return wiki_fact
+    print("[!] No se pudo traer un dato nuevo de Wikipedia, se usa el banco local.")
+    return pick_fact_from_local()
+
+
+def pick_fact(source: str = "auto") -> dict:
+    """source: "wikipedia" (siempre Wikipedia, con respaldo al banco local
+    si falla), "local" (siempre el banco fijo), o "auto" (por defecto: al
+    azar entre las dos según WIKIPEDIA_PROBABILITY, como antes)."""
+    if source == "wikipedia":
+        return pick_fact_from_wikipedia()
+    if source == "local":
+        return pick_fact_from_local()
+
+    if random.random() < WIKIPEDIA_PROBABILITY:
+        return pick_fact_from_wikipedia()
+    return pick_fact_from_local()
 
 
 def make_gradient_image() -> Image.Image:
@@ -512,12 +528,13 @@ def save_caption_file(video_path: Path, title: str, hashtags: list[str]) -> Path
     return caption_path
 
 
-def main() -> Path:
+def main(source: str = "auto") -> Path:
+    """source: "wikipedia", "local", o "auto" (mitad y mitad) — ver pick_fact()."""
     OUTPUT_DIR.mkdir(exist_ok=True)
     TMP_DIR.mkdir(exist_ok=True)
     MUSIC_DIR.mkdir(exist_ok=True)
 
-    fact = pick_fact()
+    fact = pick_fact(source)
     intro = random.choice(INTRO_PHRASES)
     outro = random.choice(OUTRO_PHRASES)
     script_text = f"{intro}{fact['text']}{outro}"
