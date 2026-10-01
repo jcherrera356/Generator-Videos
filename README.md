@@ -322,6 +322,16 @@ elijas, para que sobrevivan aunque la app se reinicie en la nube.
 > almacenamiento en cuentas de Google Workspace con "Shared Drives"). Por
 > eso el método correcto de abajo autentica **como tú mismo** en su lugar.
 
+> ⚠️ **Versión de Python**: si la app crashea al arrancar (en los logs se ve
+> "Uvicorn server started" y después nada, con el healthcheck fallando con
+> "connection reset by peer", sin ningún traceback de Python) revisa la
+> versión de Python que está usando: Settings de la app → pestaña General →
+> **Python version**. Streamlit Cloud puede asignar por defecto una versión
+> muy nueva (ej. 3.14) que tiene bugs de compatibilidad con numpy/pandas/
+> pyarrow en este entorno. Bájala a **3.11** y reinicia (Reboot). Un
+> `runtime.txt` en el repo con `python-3.11` NO tiene efecto para apps ya
+> creadas — hay que cambiarlo desde ahí.
+
 ### Paso 1: Crear las credenciales OAuth de Google (una sola vez)
 
 1. Ve a https://console.cloud.google.com/ y crea un proyecto nuevo (o usa
