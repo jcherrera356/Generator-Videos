@@ -1,3 +1,13 @@
+---
+title: Generador de datos curiosos
+emoji: 🎬
+colorFrom: blue
+colorTo: purple
+sdk: docker
+app_port: 8501
+pinned: false
+---
+
 # Generador de videos de datos curiosos
 
 Genera videos verticales (1080x1920) listos para TikTok: voz narrada con IA,
@@ -418,6 +428,62 @@ Y reemplázalo en el `folder_id` del bloque que copiaste en el paso 2.
   secret en Streamlit.
 - Nunca subas `oauth_client.json` a GitHub — ya está en el `.gitignore`,
   pero verifícalo si algo falla.
+
+## Desplegar en la nube (Hugging Face Spaces, alternativa a Streamlit Cloud)
+
+Streamlit Community Cloud no da control sobre el entorno de build (versión de
+Python, versión de Streamlit, qué trae `ffmpeg`), lo que causó varios crashes
+difíciles de diagnosticar. Hugging Face Spaces corre el mismo `app.py` pero
+dentro de un contenedor Docker que tú controlas por completo — mismo código,
+sin la caja negra.
+
+Este repo ya incluye `Dockerfile` y `entrypoint.sh` listos para esto.
+
+### Paso 1: Crear el Space
+
+1. Crea una cuenta en https://huggingface.co si no tienes una.
+2. Ve a https://huggingface.co/new-space.
+3. Ponle un nombre, elige SDK **Docker**, visibilidad pública o privada (a tu
+   gusto), y créalo.
+
+### Paso 2: Configurar los secrets
+
+En la página del Space → **Settings** → **Variables and secrets**, agrega
+estas 7 variables (los mismos valores que usarías en `[gdrive]`, `[pexels]`,
+`[groq]` y `[rawg]` de Streamlit, pero como variables sueltas):
+
+```
+GDRIVE_FOLDER_ID
+GDRIVE_CLIENT_ID
+GDRIVE_CLIENT_SECRET
+GDRIVE_REFRESH_TOKEN
+PEXELS_API_KEY
+GROQ_API_KEY
+RAWG_API_KEY
+```
+
+`entrypoint.sh` las convierte automáticamente en el mismo `secrets.toml` que
+ya usa `app.py`, así que no hace falta tocar el código.
+
+### Paso 3: Subir el código
+
+Hugging Face te da una URL de git propia para el Space (algo como
+`https://huggingface.co/spaces/TU_USUARIO/TU_SPACE`). Agrégala como un
+remoto nuevo y sube el código (no reemplaza tu remoto de GitHub, puedes
+tener ambos):
+
+```powershell
+cd C:\Users\USUARIO\Documents\GitHub\Generator-Videos
+git remote add hf https://huggingface.co/spaces/TU_USUARIO/TU_SPACE
+git push hf main
+```
+
+Cada vez que quieras actualizar el Space con cambios nuevos, repite
+`git push hf main` (además de tu `git push` normal a GitHub).
+
+El Space tarda unos minutos en construir la imagen la primera vez (instala
+`ffmpeg` y las dependencias de Python); puedes ver el progreso en la pestaña
+**Logs** del Space.
 
 ## Nota legal importante
 
