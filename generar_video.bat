@@ -27,7 +27,7 @@ if not defined SOURCE (
     set "SOURCE=auto"
 )
 
-python generate_video.py %SOURCE%
+python presentacion\cli.py %SOURCE%
 
 echo.
 pause

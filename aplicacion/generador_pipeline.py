@@ -1,5 +1,7 @@
 """
-Generador automático de videos verticales de "datos curiosos" para TikTok.
+Capa de aplicación: el pipeline completo para generar un video de "datos
+curiosos" para TikTok. Orquesta la capa de dominio (dominio/visuals.py) y
+los servicios externos (servicios/*) para producir el video final.
 
 Pipeline por cada ejecución:
   1. Elige un dato curioso no usado del banco (facts_bank.json).
@@ -8,7 +10,7 @@ Pipeline por cada ejecución:
   3. Busca fotos reales relacionadas al tema (API gratuita de Pexels) — una
      por cada segmento/oración del relato, para que la imagen vaya cambiando
      a medida que se habla. Si no hay fotos disponibles, usa un ícono
-     ilustrado de respaldo (visuals.py).
+     ilustrado de respaldo (dominio/visuals.py).
   4. Arma el fondo de pantalla completa a partir de esa misma foto (borrosa
      y oscurecida) con efecto Ken Burns; sin foto, usa un degradado.
   5. Genera un personaje animado de cuerpo completo (brazos, piernas, ropa
@@ -44,15 +46,10 @@ for _stream in (sys.stdout, sys.stderr):
 import edge_tts
 from PIL import Image, ImageEnhance, ImageFilter
 
-import app_config
-import drive_storage
-import groq_client
-import pexels_photos
-import rawg_games
-import visuals
-import wikipedia_facts
+from dominio import visuals
+from servicios import groq_client, pexels_photos, rawg_games, wikipedia_facts
 
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = Path(__file__).resolve().parent.parent
 FACTS_FILE = BASE_DIR / "facts_bank.json"
 USED_FILE = BASE_DIR / "used_facts.json"
 MUSIC_DIR = BASE_DIR / "music"
@@ -550,7 +547,8 @@ def save_caption_file(video_path: Path, title: str, hashtags: list[str], fact: d
 
 
 def main(source: str = "auto") -> Path:
-    """source: "wikipedia", "local", o "auto" (mitad y mitad) — ver pick_fact()."""
+    """source: "wikipedia", "local", "games", o "auto" (mitad y mitad entre
+    Wikipedia y local) — ver pick_fact()."""
     OUTPUT_DIR.mkdir(exist_ok=True)
     TMP_DIR.mkdir(exist_ok=True)
     MUSIC_DIR.mkdir(exist_ok=True)
@@ -622,57 +620,3 @@ def main(source: str = "auto") -> Path:
     print(f"     {title}")
     print(f"     {' '.join(hashtags)}")
     return out_path
-
-
-STATE_FILES = [USED_FILE, wikipedia_facts.USED_WIKI_FILE, rawg_games.USED_FILE]
-
-
-def _load_drive_service():
-    """Si .config/config.json tiene la sección "gdrive" (ver app_config.py y
-    README), conecta con la misma carpeta de Drive que usa la app en la
-    nube, para compartir el registro de "no repetir" entre el .bat local y
-    Streamlit Cloud. Si no existe o falla, sigue funcionando en modo
-    local-only (como antes)."""
-    cfg = app_config.get_gdrive_config()
-    if not cfg:
-        return None, None
-    try:
-        service = drive_storage.get_service(cfg["client_id"], cfg["client_secret"], cfg["refresh_token"])
-        return service, cfg["folder_id"]
-    except Exception as exc:
-        print(f"[!] No se pudo conectar con Google Drive, se sigue en modo local: {exc}")
-        return None, None
-
-
-def _sync_state_from_drive(service, folder_id: str) -> None:
-    for path in STATE_FILES:
-        data = drive_storage.download_file(service, folder_id, path.name)
-        if data:
-            path.write_bytes(data)
-
-
-def _push_results_to_drive(service, folder_id: str, out_path: Path, caption_path: Path) -> None:
-    drive_storage.upload_file(service, folder_id, out_path.name, out_path.read_bytes(), "video/mp4")
-    if caption_path.exists():
-        drive_storage.upload_file(service, folder_id, caption_path.name, caption_path.read_bytes(), "text/plain")
-    for path in STATE_FILES:
-        if path.exists():
-            drive_storage.upload_file(service, folder_id, path.name, path.read_bytes(), "application/json")
-
-
-if __name__ == "__main__":
-    source = sys.argv[1] if len(sys.argv) > 1 else "auto"
-    try:
-        service, folder_id = _load_drive_service()
-        if service:
-            print("[+] Sincronizando registro de datos ya usados desde Google Drive...")
-            _sync_state_from_drive(service, folder_id)
-
-        out_path = main(source)
-
-        if service:
-            print("[+] Subiendo video y registro actualizado a Google Drive...")
-            _push_results_to_drive(service, folder_id, out_path, out_path.with_suffix(".txt"))
-    except Exception as exc:
-        print(f"[ERROR] {exc}", file=sys.stderr)
-        sys.exit(1)

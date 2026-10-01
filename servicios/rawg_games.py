@@ -27,10 +27,10 @@ from pathlib import Path
 import requests
 from PIL import Image
 
-import app_config
-import groq_client
+from datos import app_config
+from servicios import groq_client
 
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = Path(__file__).resolve().parent.parent
 USED_FILE = BASE_DIR / "used_games.json"
 API_BASE = "https://api.rawg.io/api"
 WIKI_USER_AGENT = "ChicoTuf-GeneradorVideos/1.0 (uso personal)"

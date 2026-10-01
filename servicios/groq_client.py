@@ -11,7 +11,7 @@ romper el directo.
 
 import requests
 
-import app_config
+from datos import app_config
 
 # Catálogo de Groq cambia con el tiempo; si este modelo deja de existir,
 # revisa los disponibles en https://console.groq.com/docs/models

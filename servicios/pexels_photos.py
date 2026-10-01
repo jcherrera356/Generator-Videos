@@ -15,7 +15,7 @@ from io import BytesIO
 import requests
 from PIL import Image, ImageDraw, ImageOps
 
-import app_config
+from datos import app_config
 
 
 def fetch_topic_photos(keyword: str, count: int) -> list[Image.Image]:

@@ -12,7 +12,7 @@ from pathlib import Path
 
 import requests
 
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = Path(__file__).resolve().parent.parent
 USED_WIKI_FILE = BASE_DIR / "used_wikipedia.json"
 USER_AGENT = "ChicoTuf-GeneradorVideos/1.0 (uso personal)"
 MAX_TRACKED = 500

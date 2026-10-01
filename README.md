@@ -18,6 +18,26 @@ tienen planes gratuitos permanentes).
 > la sección **"Desplegar en la nube (Streamlit Cloud + Google Drive)"** más
 > abajo.
 
+## Arquitectura en capas (monolítica)
+
+El código está organizado en capas, cada una en su propia carpeta. Cada capa
+solo conoce a las de más abajo (nunca al revés), así que un cambio en una
+integración externa (p. ej. cambiar de Pexels a otra API de fotos) no
+obliga a tocar la capa de presentación ni la de aplicación.
+
+| Capa | Carpeta | Contiene |
+|---|---|---|
+| **Presentación** | `presentacion/` | `app.py` (UI de Streamlit) y `cli.py` (entrada por consola, la que usa `generar_video.bat`) |
+| **Aplicación** | `aplicacion/` | `generador_pipeline.py` (orquesta todo el proceso de generar un video) y `drive_sync.py` (sincronización con Google Drive, compartida por los dos puntos de entrada) |
+| **Dominio** | `dominio/` | `visuals.py` (reglas de dibujo: íconos por categoría, personaje animado) |
+| **Servicios** | `servicios/` | Adaptadores a APIs externas: `wikipedia_facts.py`, `rawg_games.py`, `pexels_photos.py`, `groq_client.py`, `drive_storage.py` |
+| **Datos** | `datos/` | `app_config.py`, que lee/escribe el único archivo de configuración local (`.config/config.json`) |
+
+Los archivos de datos/estado (`facts_bank.json`, `used_*.json`, `.config/`,
+`output/`, `tmp/`, `music/`) quedan en la raíz del proyecto — son datos y
+estado en tiempo de ejecución, no código, así que no forman parte de las
+capas.
+
 ## Toda la configuración en un solo lugar
 
 Todas las API keys y credenciales (Pexels, Groq, RAWG, Google Drive) viven
@@ -54,7 +74,7 @@ argumento (`wikipedia`, `local`, `games` o `auto`, por defecto `auto`):
 
 ```powershell
 cd C:\Users\USUARIO\Documents\GitHub\Generator-Videos
-python generate_video.py wikipedia
+python presentacion\cli.py wikipedia
 ```
 
 El video queda en la carpeta `output\` (ej. `dato_curioso_2026...mp4`), listo
@@ -67,7 +87,7 @@ del mismo nombre con el título y los hashtags sugeridos para esa publicación
 
 Si `.config/config.json` tiene la sección `"gdrive"` (ver más abajo "Toda la
 configuración en un solo lugar"), entonces cada vez que corras
-`generar_video.bat` o `python generate_video.py`:
+`generar_video.bat` o `python presentacion\cli.py`:
 
 1. Antes de generar, descarga desde Drive `used_facts.json`,
    `used_wikipedia.json` y `used_games.json` — así no repite un dato que ya
@@ -90,16 +110,16 @@ tiene un botón para cada una):
 - `"games"` — un videojuego al azar de la **API de RAWG**, con sus propias
   capturas de pantalla reales (ver sección de RAWG más abajo). Registro:
   `used_games.json`.
-- `"auto"` (el que usa `python generate_video.py` sin argumentos, por
+- `"auto"` (el que usa `python presentacion\cli.py` sin argumentos, por
   `generar_video.bat`) — **50% Wikipedia / 50% banco local**, al azar.
 
 Las tres fuentes caen automáticamente al banco local si fallan (sin
 internet, sin API key configurada, sin resultados nuevos tras varios
 intentos, etc.) — el video nunca falla por esto. Puedes ajustar la
 proporción de `"auto"` cambiando `WIKIPEDIA_PROBABILITY` en
-`generate_video.py`. Los datos de Wikipedia usan la categoría `general`
-para el ícono de respaldo (ver `visuals.py`) ya que pueden ser sobre
-cualquier tema.
+`aplicacion/generador_pipeline.py`. Los datos de Wikipedia usan la
+categoría `general` para el ícono de respaldo (ver `dominio/visuals.py`)
+ya que pueden ser sobre cualquier tema.
 
 ## Videojuegos (API gratuita de RAWG)
 
@@ -159,7 +179,7 @@ Edita `facts_bank.json` y agrega objetos con este formato:
   `animales`, `insectos`, `cuerpo`, `historia`, `tecnologia`, `clima`,
   `comida`, `general` (bombillo de idea — la usan los datos de Wikipedia).
   Para agregar una categoría nueva, súmale una función de dibujo en
-  `visuals.py` (diccionario `_ICON_DRAWERS`).
+  `dominio/visuals.py` (diccionario `_ICON_DRAWERS`).
 - `keywords` es el término de búsqueda en **inglés** que se usa para buscar
   las fotos reales en Pexels (las búsquedas en inglés dan mejores resultados
   en su banco de imágenes). Se reutiliza para las varias fotos que van
@@ -193,7 +213,7 @@ más que suficiente para generar un video por hora.
 Cada video presenta un personaje de cuerpo completo dibujado con Pillow
 (sin modelos de IA ni GPU): cabeza, torso, brazos y piernas articulados,
 con la boca sincronizada al volumen real de la narración y parpadeo
-ocasional. Todo esto vive en `visuals.py`.
+ocasional. Todo esto vive en `dominio/visuals.py`.
 
 - **Ropa al azar**: color de camisa, pantalón, piel y cabello se eligen al
   azar en cada video (ver `random_outfit()` y las listas `SHIRT_COLORS`,
@@ -207,8 +227,9 @@ ocasional. Todo esto vive en `visuals.py`.
   `pose_for_action()`; agregar una acción nueva es sumar una entrada ahí y en
   la lista `ACTIONS`.
 - Puedes mover o cambiar el tamaño del personaje y la tarjeta de fotos
-  editando las constantes `ICON_POS` / `AVATAR_POS` en `generate_video.py`
-  (`CHAR_CARD_W` / `CHAR_CARD_H` en `visuals.py` para sus proporciones).
+  editando las constantes `ICON_POS` / `AVATAR_POS` en
+  `aplicacion/generador_pipeline.py` (`CHAR_CARD_W` / `CHAR_CARD_H` en
+  `dominio/visuals.py` para sus proporciones).
 
 Nota: `visuals.py` y `facts_bank.json` también existen (copiados) en
 `..\avatar-live\`, porque el avatar en vivo usa el mismo personaje. Si
@@ -222,7 +243,8 @@ sintético (Stable Diffusion) y lip-sync real vía IA (Wav2Lip + GPU, ver
 `generate_avatar_face.py`, `lipsync_avatar.py` y la carpeta `avatar_env\`).
 Ese avatar es más realista pero **no puede** mover brazos, caminar, ni
 cambiar de ropa — solo anima la boca sobre una foto fija. El pipeline
-principal (`generate_video.py`) ya **no llama a estos archivos** — usa el
+principal (`aplicacion/generador_pipeline.py`) ya **no llama a estos
+archivos** — usa el
 personaje animado de arriba. Quedan aquí por si quieres retomarlos o
 combinarlos más adelante (por ejemplo generando el rostro con Wav2Lip y
 pegándolo como "cabeza" del personaje animado). `avatar_env\` es un entorno
@@ -250,7 +272,7 @@ español disponibles:
 edge-tts --list-voices | findstr "es-"
 ```
 
-Y cambia la constante `VOICE` en `generate_video.py`.
+Y cambia la constante `VOICE` en `aplicacion/generador_pipeline.py`.
 
 ## Automatizar la generación cada hora (opcional)
 
@@ -396,7 +418,10 @@ Y reemplázalo en el `folder_id` del bloque que copiaste en el paso 2.
 
 1. Entra a https://share.streamlit.io/ e inicia sesión con tu cuenta de
    GitHub. **"New app"** → elige el repositorio `Generator-Videos` →
-   archivo principal: `app.py` → Deploy.
+   archivo principal: `presentacion/app.py` → Deploy. (Si ya tenías esta
+   app desplegada desde antes de la reorganización en capas, entra a
+   **Settings → General → Main file path** y cámbialo a
+   `presentacion/app.py`, porque el `app.py` de la raíz ya no existe).
 2. Desde el panel de la app → **"Settings" → "Secrets"**, pega:
 
    ```toml
