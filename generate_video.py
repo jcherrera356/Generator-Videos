@@ -44,6 +44,7 @@ for _stream in (sys.stdout, sys.stderr):
 import edge_tts
 from PIL import Image, ImageEnhance, ImageFilter
 
+import drive_storage
 import groq_client
 import pexels_photos
 import rawg_games
@@ -56,6 +57,7 @@ USED_FILE = BASE_DIR / "used_facts.json"
 MUSIC_DIR = BASE_DIR / "music"
 OUTPUT_DIR = BASE_DIR / "output"
 TMP_DIR = BASE_DIR / "tmp"
+GDRIVE_CONFIG_FILE = BASE_DIR / "gdrive_config.json"
 
 VOICE = "es-MX-JorgeNeural"
 WIDTH, HEIGHT = 1080, 1920
@@ -622,9 +624,54 @@ def main(source: str = "auto") -> Path:
     return out_path
 
 
-if __name__ == "__main__":
+STATE_FILES = [USED_FILE, wikipedia_facts.USED_WIKI_FILE, rawg_games.USED_FILE]
+
+
+def _load_drive_service():
+    """Si existe gdrive_config.json (ver README), conecta con la misma carpeta
+    de Drive que usa la app en la nube, para compartir el registro de "no
+    repetir" entre el .bat local y Streamlit Cloud. Si no existe o falla,
+    sigue funcionando en modo local-only (como antes)."""
+    if not GDRIVE_CONFIG_FILE.exists():
+        return None, None
     try:
-        main()
+        cfg = json.loads(GDRIVE_CONFIG_FILE.read_text(encoding="utf-8"))
+        service = drive_storage.get_service(cfg["client_id"], cfg["client_secret"], cfg["refresh_token"])
+        return service, cfg["folder_id"]
+    except Exception as exc:
+        print(f"[!] No se pudo conectar con Google Drive, se sigue en modo local: {exc}")
+        return None, None
+
+
+def _sync_state_from_drive(service, folder_id: str) -> None:
+    for path in STATE_FILES:
+        data = drive_storage.download_file(service, folder_id, path.name)
+        if data:
+            path.write_bytes(data)
+
+
+def _push_results_to_drive(service, folder_id: str, out_path: Path, caption_path: Path) -> None:
+    drive_storage.upload_file(service, folder_id, out_path.name, out_path.read_bytes(), "video/mp4")
+    if caption_path.exists():
+        drive_storage.upload_file(service, folder_id, caption_path.name, caption_path.read_bytes(), "text/plain")
+    for path in STATE_FILES:
+        if path.exists():
+            drive_storage.upload_file(service, folder_id, path.name, path.read_bytes(), "application/json")
+
+
+if __name__ == "__main__":
+    source = sys.argv[1] if len(sys.argv) > 1 else "auto"
+    try:
+        service, folder_id = _load_drive_service()
+        if service:
+            print("[+] Sincronizando registro de datos ya usados desde Google Drive...")
+            _sync_state_from_drive(service, folder_id)
+
+        out_path = main(source)
+
+        if service:
+            print("[+] Subiendo video y registro actualizado a Google Drive...")
+            _push_results_to_drive(service, folder_id, out_path, out_path.with_suffix(".txt"))
     except Exception as exc:
         print(f"[ERROR] {exc}", file=sys.stderr)
         sys.exit(1)

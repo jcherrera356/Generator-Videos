@@ -20,20 +20,49 @@ tienen planes gratuitos permanentes).
 
 ## Uso
 
-Cada vez que quieras un video nuevo, ejecuta:
+Haz doble clic en `generar_video.bat` — te deja elegir la fuente del dato
+(Wikipedia, banco local, videojuegos/RAWG, o automático) con un menú.
+
+También puedes llamarlo directo desde la terminal, pasando la fuente como
+argumento (`wikipedia`, `local`, `games` o `auto`, por defecto `auto`):
 
 ```powershell
-cd C:\Users\USUARIO\Documents\ChicoTuf\generador-videos
-python generate_video.py
+cd C:\Users\USUARIO\Documents\GitHub\Generator-Videos
+python generate_video.py wikipedia
 ```
-
-O simplemente haz doble clic en `generar_video.bat`.
 
 El video queda en la carpeta `output\` (ej. `dato_curioso_2026...mp4`), listo
 para revisar y subir tú mismo (o vía la TikTok Content Posting API oficial —
 ver sección de subida abajo). Junto a cada video se guarda un archivo `.txt`
 del mismo nombre con el título y los hashtags sugeridos para esa publicación
 — ábrelo y copia/pega directamente en TikTok al subir el video.
+
+### Sincronizar con Google Drive (opcional, para compartir el registro con la app en la nube)
+
+Si creas un archivo `gdrive_config.json` en esta carpeta (no se sube a git)
+con esta forma:
+
+```json
+{
+  "folder_id": "1EXJMY_OpD7rXxePU7YUqua75eWmSKeag",
+  "client_id": "...",
+  "client_secret": "...",
+  "refresh_token": "..."
+}
+```
+
+(los mismos 4 valores que usas en los secrets de Streamlit Cloud, ver más
+abajo), entonces cada vez que corras `generar_video.bat` o
+`python generate_video.py`:
+
+1. Antes de generar, descarga desde Drive `used_facts.json`,
+   `used_wikipedia.json` y `used_games.json` — así no repite un dato que ya
+   se usó en la nube (o viceversa).
+2. Después de generar, sube el video, su `.txt` de título/hashtags, y los 3
+   registros actualizados a esa misma carpeta de Drive.
+
+Si no existe `gdrive_config.json`, el script sigue funcionando igual que
+antes, 100% local, sin tocar Drive.
 
 ## De dónde sale cada dato (Wikipedia, banco local o videojuegos — sin repetir)
 
