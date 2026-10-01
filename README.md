@@ -236,21 +236,6 @@ Nota: `visuals.py` y `facts_bank.json` también existen (copiados) en
 cambias el diseño del personaje o agregas datos curiosos aquí, copia los
 mismos cambios allá si quieres que se reflejen también en el directo.
 
-### Sobre el avatar fotorrealista (Wav2Lip) — legado, no usado por defecto
-
-En una iteración anterior de este proyecto se armó un avatar con rostro
-sintético (Stable Diffusion) y lip-sync real vía IA (Wav2Lip + GPU, ver
-`generate_avatar_face.py`, `lipsync_avatar.py` y la carpeta `avatar_env\`).
-Ese avatar es más realista pero **no puede** mover brazos, caminar, ni
-cambiar de ropa — solo anima la boca sobre una foto fija. El pipeline
-principal (`aplicacion/generador_pipeline.py`) ya **no llama a estos
-archivos** — usa el
-personaje animado de arriba. Quedan aquí por si quieres retomarlos o
-combinarlos más adelante (por ejemplo generando el rostro con Wav2Lip y
-pegándolo como "cabeza" del personaje animado). `avatar_env\` es un entorno
-virtual de Python aparte (con PyTorch) de varios GB — bórralo sin problema
-si no piensas usar esta parte.
-
 ## Agregar música de fondo (opcional)
 
 Coloca archivos `.mp3` o `.wav` en la carpeta `music\`. El script elige uno al

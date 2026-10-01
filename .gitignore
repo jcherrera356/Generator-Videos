@@ -1,9 +1,4 @@
 # --- Reglas propias del proyecto ---
-# Legado del avatar fotorrealista (no usado por el pipeline actual, muy pesado)
-avatar_env/
-weights/
-avatar_face.png
-
 # Estado local / secretos - en la nube viven en Drive y en Streamlit secrets
 tmp/
 output/
