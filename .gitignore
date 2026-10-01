@@ -4,14 +4,9 @@ tmp/
 output/
 .config/
 used_games.json
-tiktok_config.json
-tiktok_tokens.json
-uploaded.json
 used_facts.json
 used_wikipedia.json
-generation.log
 oauth_client.json
-token.json
 gdrive_secrets_RESULTADO.txt
 
 # --- Plantilla estándar de Python (GitHub) ---

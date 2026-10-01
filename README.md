@@ -259,72 +259,6 @@ edge-tts --list-voices | findstr "es-"
 
 Y cambia la constante `VOICE` en `aplicacion/generador_pipeline.py`.
 
-## Automatizar la generación cada hora (opcional)
-
-Si más adelante quieres que el script corra solo, sin que tengas que
-ejecutarlo a mano, se puede registrar como tarea programada de Windows:
-
-```powershell
-schtasks /create /sc hourly /mo 1 /tn "GeneradorDatosCuriosos" /tr "powershell.exe -ExecutionPolicy Bypass -File C:\Users\USUARIO\Documents\ChicoTuf\generador-videos\run_hourly.ps1" /st 00:00
-```
-
-Esto solo *genera* videos en `output\` cada hora; no sube nada a ninguna
-plataforma. Para quitarla:
-
-```powershell
-schtasks /delete /tn "GeneradorDatosCuriosos" /f
-```
-
-Los logs de cada ejecución quedan en `generation.log`.
-
-## Subir a TikTok (API oficial)
-
-Ya viene listo el flujo para publicar los videos generados usando la
-**TikTok Content Posting API** oficial (no un bot, no Selenium — nada que
-viole los Términos de Servicio de TikTok).
-
-### Requisitos previos (los haces tú, una sola vez)
-
-1. Entra a https://developers.tiktok.com/, crea una cuenta de desarrollador
-   y registra una app.
-2. En la configuración de tu app, agrega el producto **"Content Posting
-   API"** y anota tu `Client Key` y `Client Secret`.
-3. En "Redirect URI" de tu app, registra exactamente:
-   `http://localhost:8721/callback`
-   (o cambia el puerto en `tiktok_config.json` si ya usas ese puerto para
-   otra cosa — deben coincidir los dos lados).
-4. Completa `tiktok_config.json` con esos tres datos.
-
-### Autorizar la app (una sola vez)
-
-```powershell
-python tiktok_auth.py
-```
-
-Esto abre tu navegador para que inicies sesión en TikTok y apruebes los
-permisos. Guarda el token en `tiktok_tokens.json` (no lo compartas, da
-acceso a publicar en tu cuenta).
-
-### Subir los videos pendientes
-
-```powershell
-python upload_to_tiktok.py
-```
-
-Revisa la carpeta `output\` y sube todo lo que no se haya subido antes
-(lleva registro en `uploaded.json`). Puedes correrlo cuantas veces quieras.
-
-### Importante: modo "Solo yo" hasta que TikTok audite tu app
-
-Mientras tu app no haya pasado la **auditoría** de TikTok for Developers,
-la API solo te deja publicar en modo `SELF_ONLY`: el video sube directo a
-tu cuenta, pero queda como **borrador privado** que tú mismo revisas y
-publicas desde la app de TikTok en tu celular. Esto es una limitación de
-TikTok, no de este script — es su forma de evitar spam de apps nuevas sin
-revisar. Una vez que sometas tu app a auditoría y sea aprobada, cambias
-`PRIVACY_LEVEL` a `"PUBLIC_TO_EVERYONE"` en `upload_to_tiktok.py` y a
-partir de ahí sí se publica público y automático de punta a punta.
-
 ## Desplegar en la nube (Streamlit Cloud + Google Drive)
 
 Además de correrlo en tu PC, puedes publicar una versión web con un botón
@@ -336,8 +270,8 @@ elijas, para que sobrevivan aunque la app se reinicie en la nube.
 > **Qué SÍ hace esto**: generar un video cada vez que tú le das clic al
 > botón, desde cualquier lado, y guardarlo en tu Drive.
 > **Qué NO hace**: generar solo cada hora sin que tú intervengas (Streamlit
-> no es para automatización en segundo plano), ni subir a TikTok (esa parte
-> sigue siendo solo para tu PC — ver sección de subida más arriba).
+> no es para automatización en segundo plano), ni subir a TikTok (eso se
+> hace aparte, manualmente, desde los videos que quedan en tu Drive).
 
 > ⚠️ **Nota importante**: la primera versión de esta guía usaba una "cuenta
 > de servicio" de Google, pero **Google no permite que las cuentas de
@@ -367,15 +301,19 @@ elijas, para que sobrevivan aunque la app se reinicie en la nube.
      tipo **"Externo"**, pon cualquier nombre, tu correo, y guarda (no hace
      falta publicarla, con dejarla en modo "Prueba" alcanza).
 4. Tipo de aplicación: **"Aplicación de escritorio"**. Créala.
-5. Descarga el JSON de esa credencial (ícono de descarga) y guárdalo en la
-   carpeta del proyecto como `oauth_client.json`.
+5. Descarga el JSON de esa credencial (ícono de descarga) y guárdalo como
+   `setup_google_drive/oauth_client.json`.
 
 ### Paso 2: Autorizar tu cuenta (una sola vez, en tu PC)
 
 ```powershell
 cd C:\Users\USUARIO\Documents\GitHub\Generator-Videos
-python google_drive_auth.py
+python setup_google_drive\google_drive_auth.py
 ```
+
+(Este script y `oauth_client.json` viven en `setup_google_drive/` porque
+solo hace falta correrlos una vez, o de nuevo si Google invalida el
+`refresh_token` — no son parte del pipeline que corre con cada video.)
 
 Se abre tu navegador — inicia sesión con la cuenta dueña de la carpeta de
 Drive y acepta el permiso. Al terminar, la terminal imprime algo así:
@@ -440,8 +378,8 @@ Y reemplázalo en el `folder_id` del bloque que copiaste en el paso 2.
   después de dormir tarda unos segundos extra en despertar, es normal.
 - El `refresh_token` no expira mientras uses la app regularmente, pero si
   Google lo invalida (por ejemplo si revocas el acceso desde tu cuenta de
-  Google), hay que correr `google_drive_auth.py` de nuevo y actualizar el
-  secret en Streamlit.
+  Google), hay que correr `setup_google_drive/google_drive_auth.py` de
+  nuevo y actualizar el secret en Streamlit.
 - Nunca subas `oauth_client.json` a GitHub — ya está en el `.gitignore`,
   pero verifícalo si algo falla.
 
