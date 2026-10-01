@@ -27,11 +27,11 @@ google_drive_auth.py una sola vez en tu PC. Ver README.md para la guía
 paso a paso.
 """
 
-import json
 from pathlib import Path
 
 import streamlit as st
 
+import app_config
 import drive_storage
 import generate_video
 import rawg_games
@@ -43,20 +43,19 @@ STATE_FILES = [generate_video.USED_FILE, wikipedia_facts.USED_WIKI_FILE, rawg_ga
 
 
 def _write_local_secrets() -> None:
-    """Vuelca los secrets de Streamlit a los archivos config.json que ya
-    usan pexels_photos.py y groq_client.py, sin tocar esos módulos."""
+    """Vuelca los secrets de Streamlit al único .config/config.json que usan
+    pexels_photos.py, groq_client.py, rawg_games.py y generate_video.py
+    (ver app_config.py), sin tocar esos módulos."""
+    data = {}
     if "pexels" in st.secrets:
-        (BASE_DIR / "config.json").write_text(
-            json.dumps({"pexels_api_key": st.secrets["pexels"]["api_key"]}), encoding="utf-8"
-        )
+        data["pexels_api_key"] = st.secrets["pexels"]["api_key"]
     if "groq" in st.secrets:
-        (BASE_DIR / "groq_config.json").write_text(
-            json.dumps({"groq_api_key": st.secrets["groq"]["api_key"]}), encoding="utf-8"
-        )
+        data["groq_api_key"] = st.secrets["groq"]["api_key"]
     if "rawg" in st.secrets:
-        (BASE_DIR / "rawg_config.json").write_text(
-            json.dumps({"rawg_api_key": st.secrets["rawg"]["api_key"]}), encoding="utf-8"
-        )
+        data["rawg_api_key"] = st.secrets["rawg"]["api_key"]
+    if "gdrive" in st.secrets:
+        data["gdrive"] = dict(st.secrets["gdrive"])
+    app_config.save(data)
 
 
 def _sync_state_from_drive(service, folder_id: str) -> None:

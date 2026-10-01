@@ -7,10 +7,7 @@ avatar_face.png
 # Estado local / secretos - en la nube viven en Drive y en Streamlit secrets
 tmp/
 output/
-config.json
-groq_config.json
-rawg_config.json
-gdrive_config.json
+.config/
 used_games.json
 tiktok_config.json
 tiktok_tokens.json

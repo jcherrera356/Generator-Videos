@@ -28,6 +28,32 @@ tienen planes gratuitos permanentes).
 > la sección **"Desplegar en la nube (Streamlit Cloud + Google Drive)"** más
 > abajo.
 
+## Toda la configuración en un solo lugar
+
+Todas las API keys y credenciales (Pexels, Groq, RAWG, Google Drive) viven
+en **un solo archivo local**, `.config/config.json` (no se sube a git — ver
+`app_config.py`), en vez de repartidas en varios archivos sueltos:
+
+```json
+{
+  "pexels_api_key": "...",
+  "groq_api_key": "...",
+  "rawg_api_key": "...",
+  "gdrive": {
+    "folder_id": "...",
+    "client_id": "...",
+    "client_secret": "...",
+    "refresh_token": "..."
+  }
+}
+```
+
+Puedes omitir cualquier clave que no uses (por ejemplo, si no quieres
+sincronizar con Drive, deja fuera `"gdrive"`) — cada parte del pipeline sigue
+funcionando sin esa fuente en particular, usando su respaldo normal. En la
+nube (Streamlit Cloud o Render), este archivo se arma solo a partir de los
+secrets/variables de entorno — no hace falta crearlo a mano ahí.
+
 ## Uso
 
 Haz doble clic en `generar_video.bat` — te deja elegir la fuente del dato
@@ -49,21 +75,9 @@ del mismo nombre con el título y los hashtags sugeridos para esa publicación
 
 ### Sincronizar con Google Drive (opcional, para compartir el registro con la app en la nube)
 
-Si creas un archivo `gdrive_config.json` en esta carpeta (no se sube a git)
-con esta forma:
-
-```json
-{
-  "folder_id": "1EXJMY_OpD7rXxePU7YUqua75eWmSKeag",
-  "client_id": "...",
-  "client_secret": "...",
-  "refresh_token": "..."
-}
-```
-
-(los mismos 4 valores que usas en los secrets de Streamlit Cloud, ver más
-abajo), entonces cada vez que corras `generar_video.bat` o
-`python generate_video.py`:
+Si `.config/config.json` tiene la sección `"gdrive"` (ver más abajo "Toda la
+configuración en un solo lugar"), entonces cada vez que corras
+`generar_video.bat` o `python generate_video.py`:
 
 1. Antes de generar, descarga desde Drive `used_facts.json`,
    `used_wikipedia.json` y `used_games.json` — así no repite un dato que ya
@@ -71,8 +85,8 @@ abajo), entonces cada vez que corras `generar_video.bat` o
 2. Después de generar, sube el video, su `.txt` de título/hashtags, y los 3
    registros actualizados a esa misma carpeta de Drive.
 
-Si no existe `gdrive_config.json`, el script sigue funcionando igual que
-antes, 100% local, sin tocar Drive.
+Si no tiene esa sección, el script sigue funcionando igual que antes, 100%
+local, sin tocar Drive.
 
 ## De dónde sale cada dato (Wikipedia, banco local o videojuegos — sin repetir)
 
@@ -112,7 +126,8 @@ Para activarlo:
    método de login más — no es obligatorio ni riesgoso, RAWG es un sitio
    confiable y conocido en la comunidad de videojuegos).
 2. Genera tu API key gratuita (hasta 20,000 solicitudes/mes).
-3. Pégala en `rawg_config.json`:
+3. Pégala en `.config/config.json` (ver "Toda la configuración en un solo
+   lugar" más abajo):
    ```json
    {"rawg_api_key": "TU_API_KEY_AQUI"}
    ```
@@ -131,15 +146,15 @@ piden contactarlos para un licenciamiento comercial distinto.
 ## Título y hashtags sugeridos (IA, Groq)
 
 Al terminar cada video, `generate_caption()` le pide a Groq (mismo servicio
-usado en `..\avatar-live\`, reutiliza la key de `groq_config.json`) un
+usado en `..\avatar-live\`, reutiliza la key de `.config/config.json`) un
 título corto y una tanda de hashtags en español basados en el dato del
 video, y los guarda en un `.txt` junto al video. Si Groq no responde (sin
 API key, sin internet, límite alcanzado), arma un título/hashtags genéricos
 con reglas simples — el video se genera igual, solo con una sugerencia más
 básica.
 
-Para configurar/cambiar la API key de Groq, edita `groq_config.json` (ver
-instrucciones en el README de `..\avatar-live\`, sección "Configurar Groq").
+Para configurar/cambiar la API key de Groq, edita `.config/config.json` (ver
+"Toda la configuración en un solo lugar" más abajo).
 
 ## Agregar más datos curiosos
 
@@ -174,7 +189,8 @@ Para activarlo (dos minutos, sin tarjeta de crédito):
 
 1. Entra a https://www.pexels.com/api/ y crea una cuenta gratuita.
 2. Copia tu API key gratuita.
-3. Pégala en `config.json`:
+3. Pégala en `.config/config.json` (ver "Toda la configuración en un solo
+   lugar" más abajo):
    ```json
    {"pexels_api_key": "TU_API_KEY_AQUI"}
    ```
@@ -410,8 +426,8 @@ Y reemplázalo en el `folder_id` del bloque que copiaste en el paso 2.
    api_key = "TU_API_KEY_DE_RAWG"
    ```
 
-   (Las API keys son las mismas que ya tienes en `config.json` /
-   `groq_config.json` / `rawg_config.json` — ábrelos y copia el valor.)
+   (Las API keys son las mismas que ya tienes en `.config/config.json` —
+   ábrelo y copia el valor de cada una.)
 
 3. Guarda los secrets — la app se reinicia sola y queda lista.
 

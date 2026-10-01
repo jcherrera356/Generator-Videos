@@ -4,37 +4,23 @@ Pexels: una serie de fotos (una por segmento del relato) para que la imagen
 vaya cambiando a medida que el avatar habla, más una versión de fondo.
 
 Requiere una API key gratuita (sin tarjeta de crédito) de https://www.pexels.com/api/
-guardada en config.json como {"pexels_api_key": "..."}.
+guardada en .config/config.json (ver app_config.py) como {"pexels_api_key": "..."}.
 Si no hay key, no hay internet, o la búsqueda no da resultados, las funciones
 devuelven listas vacías / None para que el script principal use el ícono
 ilustrado como respaldo.
 """
 
-import json
 from io import BytesIO
-from pathlib import Path
 
 import requests
 from PIL import Image, ImageDraw, ImageOps
 
-BASE_DIR = Path(__file__).resolve().parent
-CONFIG_FILE = BASE_DIR / "config.json"
-
-
-def _get_api_key() -> str | None:
-    if not CONFIG_FILE.exists():
-        return None
-    try:
-        config = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        return None
-    key = config.get("pexels_api_key", "").strip()
-    return key or None
+import app_config
 
 
 def fetch_topic_photos(keyword: str, count: int) -> list[Image.Image]:
     """Devuelve hasta `count` fotos reales distintas (RGB, sin recortar)."""
-    api_key = _get_api_key()
+    api_key = app_config.get_pexels_api_key()
     if not api_key:
         return []
 

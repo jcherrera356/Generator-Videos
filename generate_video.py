@@ -44,6 +44,7 @@ for _stream in (sys.stdout, sys.stderr):
 import edge_tts
 from PIL import Image, ImageEnhance, ImageFilter
 
+import app_config
 import drive_storage
 import groq_client
 import pexels_photos
@@ -57,7 +58,6 @@ USED_FILE = BASE_DIR / "used_facts.json"
 MUSIC_DIR = BASE_DIR / "music"
 OUTPUT_DIR = BASE_DIR / "output"
 TMP_DIR = BASE_DIR / "tmp"
-GDRIVE_CONFIG_FILE = BASE_DIR / "gdrive_config.json"
 
 VOICE = "es-MX-JorgeNeural"
 WIDTH, HEIGHT = 1080, 1920
@@ -628,14 +628,15 @@ STATE_FILES = [USED_FILE, wikipedia_facts.USED_WIKI_FILE, rawg_games.USED_FILE]
 
 
 def _load_drive_service():
-    """Si existe gdrive_config.json (ver README), conecta con la misma carpeta
-    de Drive que usa la app en la nube, para compartir el registro de "no
-    repetir" entre el .bat local y Streamlit Cloud. Si no existe o falla,
-    sigue funcionando en modo local-only (como antes)."""
-    if not GDRIVE_CONFIG_FILE.exists():
+    """Si .config/config.json tiene la sección "gdrive" (ver app_config.py y
+    README), conecta con la misma carpeta de Drive que usa la app en la
+    nube, para compartir el registro de "no repetir" entre el .bat local y
+    Streamlit Cloud. Si no existe o falla, sigue funcionando en modo
+    local-only (como antes)."""
+    cfg = app_config.get_gdrive_config()
+    if not cfg:
         return None, None
     try:
-        cfg = json.loads(GDRIVE_CONFIG_FILE.read_text(encoding="utf-8"))
         service = drive_storage.get_service(cfg["client_id"], cfg["client_secret"], cfg["refresh_token"])
         return service, cfg["folder_id"]
     except Exception as exc:

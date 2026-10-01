@@ -9,10 +9,7 @@ avatar_face.png
 output/
 tmp/
 
-config.json
-groq_config.json
-rawg_config.json
-gdrive_config.json
+.config/
 tiktok_config.json
 tiktok_tokens.json
 uploaded.json

@@ -4,8 +4,8 @@ sus propias imágenes reales (capturas/arte del juego) en vez de fotos
 genéricas de Pexels — así el video queda con imágenes del juego real.
 
 Requiere una API key gratuita de https://rawg.io/apidocs (hasta 20,000
-solicitudes/mes gratis para uso no comercial). Guárdala en rawg_config.json:
-    {"rawg_api_key": "..."}
+solicitudes/mes gratis para uso no comercial). Guárdala en .config/config.json
+(ver app_config.py) como {"rawg_api_key": "..."}.
 
 Nota de atribución: los términos del plan gratuito de RAWG piden mencionar
 "RAWG" como fuente, con un link activo donde se use su data/imágenes. Por
@@ -27,25 +27,14 @@ from pathlib import Path
 import requests
 from PIL import Image
 
+import app_config
 import groq_client
 
 BASE_DIR = Path(__file__).resolve().parent
-CONFIG_FILE = BASE_DIR / "rawg_config.json"
 USED_FILE = BASE_DIR / "used_games.json"
 API_BASE = "https://api.rawg.io/api"
 WIKI_USER_AGENT = "ChicoTuf-GeneradorVideos/1.0 (uso personal)"
 MAX_TRACKED = 500
-
-
-def _get_api_key() -> str | None:
-    if not CONFIG_FILE.exists():
-        return None
-    try:
-        config = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        return None
-    key = config.get("rawg_api_key", "").strip()
-    return key or None
 
 
 def _load_used() -> list[str]:
@@ -198,7 +187,7 @@ def _fallback_text(
 def fetch_unused_game(max_attempts: int = 8) -> dict | None:
     """Devuelve un dato (mismo formato que facts_bank.json, más una lista
     de fotos reales ya descargadas) sobre un videojuego no usado antes."""
-    api_key = _get_api_key()
+    api_key = app_config.get_rawg_api_key()
     if not api_key:
         return None
 
