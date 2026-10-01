@@ -429,15 +429,61 @@ Y reemplázalo en el `folder_id` del bloque que copiaste en el paso 2.
 - Nunca subas `oauth_client.json` a GitHub — ya está en el `.gitignore`,
   pero verifícalo si algo falla.
 
-## Desplegar en la nube (Hugging Face Spaces, alternativa a Streamlit Cloud)
+## Desplegar en la nube (Render, alternativa a Streamlit Cloud)
 
 Streamlit Community Cloud no da control sobre el entorno de build (versión de
 Python, versión de Streamlit, qué trae `ffmpeg`), lo que causó varios crashes
-difíciles de diagnosticar. Hugging Face Spaces corre el mismo `app.py` pero
-dentro de un contenedor Docker que tú controlas por completo — mismo código,
-sin la caja negra.
+difíciles de diagnosticar. Render corre el mismo `app.py` pero dentro de un
+contenedor Docker que tú controlas por completo — mismo código, sin la caja
+negra. (Hugging Face Spaces era otra opción, pero ahora exige plan PRO de
+pago para usar Docker — solo deja gratis sus Spaces "Static", que no sirven
+para correr Python).
 
 Este repo ya incluye `Dockerfile` y `entrypoint.sh` listos para esto.
+
+### Paso 1: Crear el servicio en Render
+
+1. Crea una cuenta en https://render.com (puedes entrar con tu cuenta de
+   GitHub).
+2. Dashboard → **New +** → **Web Service**.
+3. Conecta tu repo `jcherrera356/Generator-Videos` (Render pide autorizar
+   acceso a GitHub la primera vez).
+4. Render detecta el `Dockerfile` solo. Déjalo en **Environment: Docker**.
+   Elige el plan **Free**.
+
+### Paso 2: Configurar los secrets
+
+En la misma pantalla de creación (o después en **Environment** → **Add
+Environment Variable**), agrega estas 7 variables (los mismos valores que
+usarías en `[gdrive]`, `[pexels]`, `[groq]` y `[rawg]` de Streamlit, pero
+sueltas):
+
+```
+GDRIVE_FOLDER_ID
+GDRIVE_CLIENT_ID
+GDRIVE_CLIENT_SECRET
+GDRIVE_REFRESH_TOKEN
+PEXELS_API_KEY
+GROQ_API_KEY
+RAWG_API_KEY
+```
+
+`entrypoint.sh` las convierte automáticamente en el mismo `secrets.toml` que
+ya usa `app.py` — no hace falta tocar el código. Render asigna el puerto
+solo (vía la variable `PORT`), eso también lo maneja `entrypoint.sh`.
+
+### Paso 3: Deploy
+
+Dale a **Create Web Service**. Render clona el repo, construye la imagen
+(instala `ffmpeg` y las dependencias — tarda varios minutos la primera vez)
+y la levanta. Puedes ver el progreso en la pestaña **Logs**.
+
+> ⚠️ En el plan gratis, el servicio "se duerme" tras ~15 minutos sin tráfico
+> y la próxima visita tarda 30-60 segundos en despertar — es normal, no es
+> un error. Cada `git push` a GitHub dispara un redeploy automático.
+
+<details>
+<summary>Si en vez de esto quieres usar Hugging Face Spaces (requiere plan PRO)</summary>
 
 ### Paso 1: Crear el Space
 
@@ -484,6 +530,8 @@ Cada vez que quieras actualizar el Space con cambios nuevos, repite
 El Space tarda unos minutos en construir la imagen la primera vez (instala
 `ffmpeg` y las dependencias de Python); puedes ver el progreso en la pestaña
 **Logs** del Space.
+
+</details>
 
 ## Nota legal importante
 
