@@ -393,34 +393,44 @@ nada — ya es tuya. Solo copia el **ID de la carpeta** desde la URL:
 
 Y reemplázalo en el `folder_id` del bloque que copiaste en el paso 2.
 
-### Paso 4: Subir `.config/config.json` y desplegar
+### Paso 4: Configurar los Secrets en Streamlit Cloud
 
-`presentacion/app.py` lee la configuración directo de `.config/config.json`
-(lo mismo que usa el `.bat` local) en vez de pedir los Secrets de
-Streamlit — así no hay que pegar nada a mano ahí. Para esto:
+> ⚠️ **`.config/config.json` NUNCA se sube a git** — tiene tus API keys y,
+> lo más sensible, el `refresh_token` de Google Drive. Ya se probó subirlo
+> una vez (incluso en repo "privado") y Groq detectó la key expuesta y
+> mandó una alerta por correo — así que toca repetir esto con Secrets de
+> Streamlit, no con el archivo.
 
-> ⚠️ **El repo DEBE ser privado.** `.config/config.json` tiene tus API keys
-> y, lo más sensible, el `refresh_token` de Google Drive — con eso cualquiera
-> tendría acceso a tu carpeta de Drive. Si el repo es público, **no subas
-> este archivo** (el `.gitignore` original lo protegía justo por esto).
-> Para hacerlo privado: Settings del repo en GitHub → "Danger Zone" →
-> "Change visibility" → "Private".
+1. Entra a https://share.streamlit.io/ e inicia sesión con tu cuenta de
+   GitHub. **"New app"** → elige el repositorio `Generator-Videos` →
+   archivo principal: `presentacion/app.py` → Deploy. (Si ya tenías esta
+   app desplegada desde antes de la reorganización en capas, entra a
+   **Settings → General → Main file path** y cámbialo a
+   `presentacion/app.py`, porque el `app.py` de la raíz ya no existe).
+2. Desde el panel de la app → **"Settings" → "Secrets"**, pega:
 
-1. Con el repo ya en privado, agrega `.config/config.json` a git (está
-   excluido de `.gitignore` a propósito) y súbelo:
-   ```powershell
-   git add .config/config.json
-   git commit -m "Agrega config para Streamlit Cloud"
-   git push
+   ```toml
+   [gdrive]
+   folder_id = "EL-ID-DE-TU-CARPETA"
+   client_id = "EL-CLIENT-ID-DEL-PASO-2"
+   client_secret = "EL-CLIENT-SECRET-DEL-PASO-2"
+   refresh_token = "EL-REFRESH-TOKEN-DEL-PASO-2"
+
+   [pexels]
+   api_key = "TU_API_KEY_DE_PEXELS"
+
+   [groq]
+   api_key = "TU_API_KEY_DE_GROQ"
+
+   [rawg]
+   api_key = "TU_API_KEY_DE_RAWG"
    ```
-2. Entra a https://share.streamlit.io/ e inicia sesión con tu cuenta de
-   GitHub. **"New app"** → autoriza acceso a repos privados si lo pide →
-   elige el repositorio `Generator-Videos` → archivo principal:
-   `presentacion/app.py` → Deploy. (Si ya tenías esta app desplegada desde
-   antes de la reorganización en capas, entra a **Settings → General →
-   Main file path** y cámbialo a `presentacion/app.py`).
 
-No hace falta tocar la pestaña "Secrets" para nada.
+   (Las API keys son las mismas que ya tienes en `.config/config.json` —
+   ábrelo tú mismo y copia el valor de cada una; no las pegues en ningún
+   otro lado.)
+
+3. Guarda los secrets — la app se reinicia sola y queda lista.
 
 ### Limitaciones a tener en cuenta
 
@@ -432,14 +442,12 @@ No hace falta tocar la pestaña "Secrets" para nada.
 - El `refresh_token` no expira mientras uses la app regularmente, pero si
   Google lo invalida (por ejemplo si revocas el acceso desde tu cuenta de
   Google), hay que correr `setup_google_drive/google_drive_auth.py` de
-  nuevo, actualizar `.config/config.json`, y volver a hacer `git push`.
-- Si alguna vez vuelves a hacer el repo público, **saca `.config/config.json`
-  de git primero** (`git rm --cached .config/config.json`, agrégalo de
-  nuevo al `.gitignore`, y regenera todas las credenciales — el
-  `refresh_token` viejo queda en el historial de git para siempre aunque
-  borres el archivo).
-- Nunca subas `oauth_client.json` a GitHub — ya está en el `.gitignore`,
-  pero verifícalo si algo falla.
+  nuevo y actualizar el secret en Streamlit.
+- Nunca subas `oauth_client.json` ni `.config/config.json` a GitHub — ya
+  están en el `.gitignore`, pero verifícalo si algo falla. Si alguna vez
+  se filtra una credencial (como ya pasó una vez con la key de Groq),
+  regénerala de inmediato en el panel del proveedor — quitarla de git no
+  alcanza, porque queda en el historial para siempre.
 
 ## Nota legal importante
 

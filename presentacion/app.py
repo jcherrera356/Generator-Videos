@@ -7,10 +7,30 @@ carpeta de Google Drive (aplicacion/drive_sync.py), junto con el registro
 de "no repetir", para que sobrevivan aunque esta app se reinicie en la
 nube.
 
-Config: lee directo de .config/config.json (ver datos/app_config.py) --
-igual que el .bat local, sin pasar por Streamlit Secrets. Por eso este
-archivo SÍ se sube a git a propósito (ver README, sección "Desplegar en
-Streamlit Cloud") -- el repo debe ser privado para que esto sea seguro.
+Configuración necesaria en Streamlit Cloud → Settings → Secrets:
+
+    [gdrive]
+    folder_id = "1EXJMY_OpD7rXxePU7YUqua75eWmSKeag"
+    client_id = "..."
+    client_secret = "..."
+    refresh_token = "..."
+
+    [pexels]
+    api_key = "..."
+
+    [groq]
+    api_key = "..."
+
+    [rawg]
+    api_key = "..."
+
+Los 3 valores de [gdrive] (además de folder_id) salen de correr
+setup_google_drive/google_drive_auth.py una sola vez en tu PC. Ver
+README.md para la guía paso a paso.
+
+IMPORTANTE: .config/config.json NUNCA se sube a git (ver .gitignore) --
+tiene credenciales reales, incluido el refresh_token de Drive. En la nube
+se usan los Secrets de Streamlit en su lugar, nunca el archivo.
 
 Nota: en el dashboard de Streamlit Cloud, el "Main file path" debe apuntar
 a presentacion/app.py (no a app.py en la raíz, que ya no existe).
@@ -30,6 +50,25 @@ from aplicacion import drive_sync, generador_pipeline  # noqa: E402
 from datos import app_config  # noqa: E402
 from servicios import google_trends  # noqa: E402
 
+
+def _write_local_secrets() -> None:
+    """Vuelca los secrets de Streamlit al único .config/config.json que usan
+    los servicios (pexels_photos.py, groq_client.py, rawg_games.py) y la
+    sincronización con Drive (ver datos/app_config.py), sin tocar esos
+    módulos. Este archivo solo existe en el disco temporal del contenedor
+    de Streamlit Cloud -- nunca se sube a git."""
+    data = {}
+    if "pexels" in st.secrets:
+        data["pexels_api_key"] = st.secrets["pexels"]["api_key"]
+    if "groq" in st.secrets:
+        data["groq_api_key"] = st.secrets["groq"]["api_key"]
+    if "rawg" in st.secrets:
+        data["rawg_api_key"] = st.secrets["rawg"]["api_key"]
+    if "gdrive" in st.secrets:
+        data["gdrive"] = dict(st.secrets["gdrive"])
+    app_config.save(data)
+
+
 st.set_page_config(page_title="Generador de datos curiosos")
 st.title("Generador de videos de datos curiosos")
 st.caption(
@@ -37,16 +76,16 @@ st.caption(
     "personaje animado y subtítulos) y lo guarda en tu carpeta de Google Drive."
 )
 
-GDRIVE_CFG = app_config.get_gdrive_config()
-if not GDRIVE_CFG:
+if "gdrive" not in st.secrets:
     st.error(
-        "Falta la sección \"gdrive\" en .config/config.json (folder_id, client_id, "
-        "client_secret, refresh_token). Ver README.md, sección 'Desplegar en "
-        "Streamlit Cloud'."
+        "Falta configurar los secrets de Google Drive (`[gdrive]` con `folder_id`, "
+        "`client_id`, `client_secret` y `refresh_token`). Ver README.md, sección "
+        "'Desplegar en Streamlit Cloud'."
     )
     st.stop()
 
-FOLDER_ID = GDRIVE_CFG["folder_id"]
+_write_local_secrets()
+FOLDER_ID = st.secrets["gdrive"]["folder_id"]
 
 
 def _generate_and_upload(source: str, trend_category: str | None = None) -> None:
