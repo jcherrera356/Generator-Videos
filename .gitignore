@@ -1,8 +1,8 @@
 # --- Reglas propias del proyecto ---
-# Estado local - en la nube vive en Drive
-# (.config/ SI se sube a git a proposito -- repo privado, ver README)
+# Estado local / secretos - en la nube viven en Drive y en Streamlit secrets
 tmp/
 output/
+.config/
 used_games.json
 used_facts.json
 used_wikipedia.json
