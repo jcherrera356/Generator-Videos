@@ -1,8 +1,8 @@
 """
-Autoriza el acceso a TU Google Drive (una sola vez, se corre en tu PC, no
-en Streamlit Cloud). Las cuentas de servicio de Google no pueden crear
-archivos en un Drive personal (no tienen cuota de almacenamiento propia),
-así que en vez de eso la app actúa "como tú" usando este token.
+Autoriza el acceso a TU Google Drive (una sola vez, se corre en tu PC).
+Las cuentas de servicio de Google no pueden crear archivos en un Drive
+personal (no tienen cuota de almacenamiento propia), así que en vez de eso
+el script actúa "como tú" usando este token.
 
 Antes de correrlo:
   1. En https://console.cloud.google.com/ (mismo proyecto de antes), ve a
@@ -13,7 +13,9 @@ Antes de correrlo:
   4. Corre: python google_drive_auth.py
   5. Se abre tu navegador, inicias sesión con la cuenta dueña de la carpeta
      de Drive, y aceptas el permiso.
-  6. Copia los 3 valores que imprime al final en los Secrets de Streamlit.
+  6. Copia el bloque "gdrive" que imprime al final dentro de
+     .config/config.json (ver datos/app_config.py), agregando el
+     `folder_id` de la carpeta que quieras usar.
 """
 
 import json
@@ -48,21 +50,21 @@ def main() -> None:
     client_config = json.loads(CLIENT_SECRET_FILE.read_text(encoding="utf-8"))
     client_info = client_config.get("installed") or client_config.get("web")
 
-    block = (
-        "[gdrive]\n"
-        'folder_id = "TU_ID_DE_CARPETA_AQUI"\n'
-        f'client_id = "{client_info["client_id"]}"\n'
-        f'client_secret = "{client_info["client_secret"]}"\n'
-        f'refresh_token = "{creds.refresh_token}"\n'
-    )
+    gdrive_block = {
+        "folder_id": "TU_ID_DE_CARPETA_AQUI",
+        "client_id": client_info["client_id"],
+        "client_secret": client_info["client_secret"],
+        "refresh_token": creds.refresh_token,
+    }
+    block = json.dumps({"gdrive": gdrive_block}, indent=2, ensure_ascii=False)
 
     # Se guarda en un archivo ADEMAS de imprimirse, por si la consola vuelve
     # a fallar - este archivo NO se sube a git (ver .gitignore).
     RESULT_FILE.write_text(block, encoding="utf-8")
 
-    print("\n[OK] Autorizacion completada. Pega esto en Streamlit -> Settings -> Secrets:\n")
+    print("\n[OK] Autorizacion completada. Agrega esto dentro de .config/config.json:\n")
     print(block)
-    print(f"(Tambien quedo guardado en {RESULT_FILE.name} por si acaso)")
+    print(f"\n(Tambien quedo guardado en {RESULT_FILE.name} por si acaso)")
 
 
 if __name__ == "__main__":

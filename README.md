@@ -14,10 +14,6 @@ tienen planes gratuitos permanentes).
 > Para el avatar que transmite en vivo en TikTok LIVE, ve a la carpeta
 > hermana `..\avatar-live\` (tiene su propio README).
 
-> ¿Quieres generar videos desde el navegador sin tener el PC prendido? Ve a
-> la sección **"Desplegar en la nube (Streamlit Cloud + Google Drive)"** más
-> abajo.
-
 ## Arquitectura en capas (monolítica)
 
 El código está organizado en capas, cada una en su propia carpeta. Cada capa
@@ -27,8 +23,8 @@ obliga a tocar la capa de presentación ni la de aplicación.
 
 | Capa | Carpeta | Contiene |
 |---|---|---|
-| **Presentación** | `presentacion/` | `app.py` (UI de Streamlit) y `cli.py` (entrada por consola, la que usa `generar_video.bat`) |
-| **Aplicación** | `aplicacion/` | `generador_pipeline.py` (orquesta todo el proceso de generar un video) y `drive_sync.py` (sincronización con Google Drive, compartida por los dos puntos de entrada) |
+| **Presentación** | `presentacion/` | `cli.py` (entrada por consola, la que usa `generar_video.bat`) |
+| **Aplicación** | `aplicacion/` | `generador_pipeline.py` (orquesta todo el proceso de generar un video) y `drive_sync.py` (sincronización con Google Drive) |
 | **Dominio** | `dominio/` | `visuals.py` (reglas de dibujo: íconos por categoría, personaje animado) |
 | **Servicios** | `servicios/` | Adaptadores a APIs externas: `wikipedia_facts.py`, `rawg_games.py`, `google_trends.py`, `wikimedia_commons.py`, `pexels_photos.py`, `groq_client.py`, `drive_storage.py` |
 | **Datos** | `datos/` | `app_config.py`, que lee/escribe el único archivo de configuración local (`.config/config.json`) |
@@ -60,9 +56,7 @@ en **un solo archivo local**, `.config/config.json` (no se sube a git — ver
 
 Puedes omitir cualquier clave que no uses (por ejemplo, si no quieres
 sincronizar con Drive, deja fuera `"gdrive"`) — cada parte del pipeline sigue
-funcionando sin esa fuente en particular, usando su respaldo normal. En la
-nube (Streamlit Cloud o Render), este archivo se arma solo a partir de los
-secrets/variables de entorno — no hace falta crearlo a mano ahí.
+funcionando sin esa fuente en particular, usando su respaldo normal.
 
 ## Uso
 
@@ -83,25 +77,50 @@ ver sección de subida abajo). Junto a cada video se guarda un archivo `.txt`
 del mismo nombre con el título y los hashtags sugeridos para esa publicación
 — ábrelo y copia/pega directamente en TikTok al subir el video.
 
-### Sincronizar con Google Drive (opcional, para compartir el registro con la app en la nube)
+### Sincronizar con Google Drive (opcional)
 
 Si `.config/config.json` tiene la sección `"gdrive"` (ver más abajo "Toda la
 configuración en un solo lugar"), entonces cada vez que corras
 `generar_video.bat` o `python presentacion\cli.py`:
 
 1. Antes de generar, descarga desde Drive `used_facts.json`,
-   `used_wikipedia.json` y `used_games.json` — así no repite un dato que ya
-   se usó en la nube (o viceversa).
-2. Después de generar, sube el video, su `.txt` de título/hashtags, y los 3
-   registros actualizados a esa misma carpeta de Drive.
+   `used_wikipedia.json`, `used_games.json` y `used_trends.json` — así no
+   repite un dato ya usado, útil si generas videos desde más de un equipo.
+2. Después de generar, sube el video, su `.txt` de título/hashtags, y esos
+   mismos registros actualizados a esa carpeta de Drive.
 
-Si no tiene esa sección, el script sigue funcionando igual que antes, 100%
-local, sin tocar Drive.
+Si no tiene esa sección, el script sigue funcionando igual, 100% local, sin
+tocar Drive.
+
+**Para configurarlo** (una sola vez):
+
+1. En https://console.cloud.google.com/ crea un proyecto (o usa uno
+   existente) y habilita la **"Google Drive API"**.
+2. Ve a **"Credenciales"** → **"Crear credenciales"** → **"ID de cliente de
+   OAuth"** (tipo de aplicación: **"Aplicación de escritorio"**).
+   - Si pide configurar antes la "Pantalla de consentimiento", elige tipo
+     **"Externo"**, pon cualquier nombre/correo, y déjala en modo "Prueba".
+3. Descarga el JSON de esa credencial y guárdalo como
+   `setup_google_drive/oauth_client.json`.
+4. Corre:
+   ```powershell
+   python setup_google_drive\google_drive_auth.py
+   ```
+   Se abre tu navegador — inicia sesión con la cuenta dueña de la carpeta
+   de Drive y acepta el permiso. Al terminar, imprime (y guarda en
+   `setup_google_drive/gdrive_secrets_RESULTADO.txt`) un bloque `"gdrive"`
+   listo para pegar en `.config/config.json`.
+5. Completa `folder_id` con el ID de tu carpeta de Drive — lo sacas de su
+   URL: `https://drive.google.com/drive/folders/`**`ESTE-ES-EL-ID`**`?usp=sharing`.
+
+(`google_drive_auth.py` y `oauth_client.json` viven en `setup_google_drive/`
+porque solo hace falta correrlos una vez, o de nuevo si Google invalida el
+`refresh_token` — no son parte del pipeline que corre con cada video.)
 
 ## De dónde sale cada dato (Wikipedia, banco local, videojuegos o tendencias — sin repetir)
 
-`generador_pipeline.main(source=...)` acepta cuatro fuentes (la app de
-Streamlit tiene un botón para cada una, y `generar_video.bat` un menú):
+`generador_pipeline.main(source=...)` acepta cuatro fuentes (`generar_video.bat`
+las ofrece en un menú):
 
 - `"wikipedia"` — un artículo aleatorio de la **API pública de Wikipedia**
   (sin API key). Registro de usados: `used_wikipedia.json`.
@@ -145,12 +164,15 @@ de Google para su antigua función "Daily Trends" (la librería `pytrends` y
 su endpoint viejo dejaron de funcionar). Sin API key. Solo trae ~10-20
 temas de las últimas 24h, así que una categoría puntual puede no tener nada
 casi cualquier día — en ese caso cae al banco local como siempre, el video
-nunca falla por esto. El país se fija en la constante `COUNTRY` de
-`servicios/google_trends.py` (por defecto `"CO"`, Colombia).
+nunca falla por esto. El país/alcance se fija en la constante `COUNTRY` de
+`servicios/google_trends.py` — por defecto `"GLOBAL"` (temas mundiales, en
+cualquier idioma; la IA siempre traduce el dato al español). Cámbiala por
+un código de 2 letras (`"CO"`, `"MX"`, `"US"`, etc.) si prefieres un país
+puntual.
 
 **Categoría**: elegible en `generar_video.bat` (submenú tras elegir
-"Tendencias"), en la app de Streamlit (selector), o como segundo argumento
-de `python presentacion\cli.py` — Videojuegos, Noticias, Moda,
+"Tendencias") o como segundo argumento de `python presentacion\cli.py` —
+Videojuegos, Noticias, Moda,
 Entretenimiento, Tecnología, Deportes, Negocios, Salud o Ciencia (lista
 completa en `google_trends.CATEGORIES`). Como Google no deja filtrar su RSS
 por categoría (se probó con varios parámetros, los ignora todos), la IA
@@ -314,140 +336,6 @@ edge-tts --list-voices | findstr "es-"
 ```
 
 Y cambia la constante `VOICE` en `aplicacion/generador_pipeline.py`.
-
-## Desplegar en la nube (Streamlit Cloud + Google Drive)
-
-Además de correrlo en tu PC, puedes publicar una versión web con un botón
-"Generar video" que funciona desde cualquier navegador, sin tener tu PC
-prendido. Los videos y el registro de "no repetir" (`used_facts.json`,
-`used_wikipedia.json`) se guardan en una carpeta de **Google Drive** que tú
-elijas, para que sobrevivan aunque la app se reinicie en la nube.
-
-> **Qué SÍ hace esto**: generar un video cada vez que tú le das clic al
-> botón, desde cualquier lado, y guardarlo en tu Drive.
-> **Qué NO hace**: generar solo cada hora sin que tú intervengas (Streamlit
-> no es para automatización en segundo plano), ni subir a TikTok (eso se
-> hace aparte, manualmente, desde los videos que quedan en tu Drive).
-
-> ⚠️ **Nota importante**: la primera versión de esta guía usaba una "cuenta
-> de servicio" de Google, pero **Google no permite que las cuentas de
-> servicio creen archivos en un Drive personal** (solo tienen cuota de
-> almacenamiento en cuentas de Google Workspace con "Shared Drives"). Por
-> eso el método correcto de abajo autentica **como tú mismo** en su lugar.
-
-> ⚠️ **Versión de Python**: si la app crashea al arrancar (en los logs se ve
-> "Uvicorn server started" y después nada, con el healthcheck fallando con
-> "connection reset by peer", sin ningún traceback de Python) revisa la
-> versión de Python que está usando: Settings de la app → pestaña General →
-> **Python version**. Streamlit Cloud puede asignar por defecto una versión
-> muy nueva (ej. 3.14) que tiene bugs de compatibilidad con numpy/pandas/
-> pyarrow en este entorno. Bájala a **3.11** y reinicia (Reboot). Un
-> `runtime.txt` en el repo con `python-3.11` NO tiene efecto para apps ya
-> creadas — hay que cambiarlo desde ahí.
-
-### Paso 1: Crear las credenciales OAuth de Google (una sola vez)
-
-1. Ve a https://console.cloud.google.com/ y crea un proyecto nuevo (o usa
-   uno existente).
-2. En el buscador de arriba, busca **"Google Drive API"** y haz clic en
-   **Habilitar**.
-3. Ve a **"Credenciales"** (menú izquierdo) → **"Crear credenciales"** →
-   **"ID de cliente de OAuth"**.
-   - Si te pide configurar la "Pantalla de consentimiento" primero, elige
-     tipo **"Externo"**, pon cualquier nombre, tu correo, y guarda (no hace
-     falta publicarla, con dejarla en modo "Prueba" alcanza).
-4. Tipo de aplicación: **"Aplicación de escritorio"**. Créala.
-5. Descarga el JSON de esa credencial (ícono de descarga) y guárdalo como
-   `setup_google_drive/oauth_client.json`.
-
-### Paso 2: Autorizar tu cuenta (una sola vez, en tu PC)
-
-```powershell
-cd C:\Users\USUARIO\Documents\GitHub\Generator-Videos
-python setup_google_drive\google_drive_auth.py
-```
-
-(Este script y `oauth_client.json` viven en `setup_google_drive/` porque
-solo hace falta correrlos una vez, o de nuevo si Google invalida el
-`refresh_token` — no son parte del pipeline que corre con cada video.)
-
-Se abre tu navegador — inicia sesión con la cuenta dueña de la carpeta de
-Drive y acepta el permiso. Al terminar, la terminal imprime algo así:
-
-```
-[gdrive]
-folder_id = "TU_ID_DE_CARPETA_AQUI"
-client_id = "...apps.googleusercontent.com"
-client_secret = "..."
-refresh_token = "..."
-```
-
-**Guarda ese bloque completo**, lo necesitas en el paso 4.
-
-### Paso 3: Compartir la carpeta de Drive y obtener su ID
-
-Si la carpeta ya es tuya (como "Nuevos Videos"), no necesitas compartir
-nada — ya es tuya. Solo copia el **ID de la carpeta** desde la URL:
-
-`https://drive.google.com/drive/folders/`**`ESTE-ES-EL-ID`**`?usp=sharing`
-
-Y reemplázalo en el `folder_id` del bloque que copiaste en el paso 2.
-
-### Paso 4: Configurar los Secrets en Streamlit Cloud
-
-> ⚠️ **`.config/config.json` NUNCA se sube a git** — tiene tus API keys y,
-> lo más sensible, el `refresh_token` de Google Drive. Ya se probó subirlo
-> una vez (incluso en repo "privado") y Groq detectó la key expuesta y
-> mandó una alerta por correo — así que toca repetir esto con Secrets de
-> Streamlit, no con el archivo.
-
-1. Entra a https://share.streamlit.io/ e inicia sesión con tu cuenta de
-   GitHub. **"New app"** → elige el repositorio `Generator-Videos` →
-   archivo principal: `presentacion/app.py` → Deploy. (Si ya tenías esta
-   app desplegada desde antes de la reorganización en capas, entra a
-   **Settings → General → Main file path** y cámbialo a
-   `presentacion/app.py`, porque el `app.py` de la raíz ya no existe).
-2. Desde el panel de la app → **"Settings" → "Secrets"**, pega:
-
-   ```toml
-   [gdrive]
-   folder_id = "EL-ID-DE-TU-CARPETA"
-   client_id = "EL-CLIENT-ID-DEL-PASO-2"
-   client_secret = "EL-CLIENT-SECRET-DEL-PASO-2"
-   refresh_token = "EL-REFRESH-TOKEN-DEL-PASO-2"
-
-   [pexels]
-   api_key = "TU_API_KEY_DE_PEXELS"
-
-   [groq]
-   api_key = "TU_API_KEY_DE_GROQ"
-
-   [rawg]
-   api_key = "TU_API_KEY_DE_RAWG"
-   ```
-
-   (Las API keys son las mismas que ya tienes en `.config/config.json` —
-   ábrelo tú mismo y copia el valor de cada una; no las pegues en ningún
-   otro lado.)
-
-3. Guarda los secrets — la app se reinicia sola y queda lista.
-
-### Limitaciones a tener en cuenta
-
-- El plan gratuito de Streamlit Cloud tiene CPU/RAM compartida y limitada:
-  generar un video puede tardar más ahí que en tu PC (varios minutos en vez
-  de segundos/un minuto).
-- La app se "duerme" tras un rato sin uso — la primera vez que la abres
-  después de dormir tarda unos segundos extra en despertar, es normal.
-- El `refresh_token` no expira mientras uses la app regularmente, pero si
-  Google lo invalida (por ejemplo si revocas el acceso desde tu cuenta de
-  Google), hay que correr `setup_google_drive/google_drive_auth.py` de
-  nuevo y actualizar el secret en Streamlit.
-- Nunca subas `oauth_client.json` ni `.config/config.json` a GitHub — ya
-  están en el `.gitignore`, pero verifícalo si algo falla. Si alguna vez
-  se filtra una credencial (como ya pasó una vez con la key de Groq),
-  regénerala de inmediato en el panel del proveedor — quitarla de git no
-  alcanza, porque queda en el historial para siempre.
 
 ## Nota legal importante
 

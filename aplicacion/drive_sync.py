@@ -2,11 +2,9 @@
 Capa de aplicación: sincroniza el video generado y el registro de "no
 repetir" (used_facts.json, used_wikipedia.json, used_games.json,
 used_trends.json) con una carpeta de Google Drive, para que ese registro
-sobreviva aunque la app se reinicie en la nube y para compartirlo entre el
-.bat local y la app web.
+sobreviva entre corridas y en distintos equipos.
 
-Usado tanto por presentacion/cli.py (el .bat local) como por
-presentacion/app.py (Streamlit), así la lógica vive en un solo lugar.
+Usado por presentacion/cli.py (el .bat local).
 """
 
 from pathlib import Path

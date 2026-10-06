@@ -27,7 +27,12 @@ MAX_TRACKED = 500
 
 RSS_URL = "https://trends.google.com/trending/rss"
 HT_NS = "https://trends.google.com/trending/rss"
-COUNTRY = "CO"  # Colombia
+# "GLOBAL" es una categoria real del RSS (se confirmo probandola -- devuelve
+# una lista mas corta y genuinamente mundial, en varios idiomas, distinta a
+# la de cualquier pais puntual). Antes estaba en "CO" (Colombia), pero salian
+# temas demasiado locales/especificos. Usa un codigo de pais (ej. "CO", "US",
+# "MX") en vez de "GLOBAL" si prefieres tendencias de un mercado puntual.
+COUNTRY = "GLOBAL"
 
 # Google no deja filtrar el RSS por categoría (se probó con varios nombres
 # de parámetro, los ignora todos en silencio) -- en vez de eso, se le pide a
@@ -78,21 +83,26 @@ def _fetch_trending_items() -> list[dict]:
     return items
 
 
-def _build_curious_text(term: str, news_titles: list[str]) -> tuple[str, str] | None:
-    """Devuelve (categoria, texto) o None si la IA decide que no hay
-    suficiente información confiable para explicar el tema."""
+def _build_curious_text(term: str, news_titles: list[str]) -> tuple[str, str, str] | None:
+    """Devuelve (categoria, texto, palabras_clave) o None si la IA decide
+    que no hay suficiente información confiable para explicar el tema."""
     context = f"Tema en tendencia ahora en buscadores: {term}"
     if news_titles:
         context += "\nTitulares de noticias relacionadas:\n" + "\n".join(f"- {t}" for t in news_titles)
 
     system_prompt = (
         "Eres un redactor de 'datos curiosos' para TikTok, en español neutro. "
-        "Te doy un tema que está en tendencia ahora mismo junto con titulares "
-        "de noticias relacionadas. LEE BIEN esos titulares antes de escribir.\n\n"
+        "Te doy un tema en tendencia ahora mismo (la fuente es un RSS mundial, "
+        "puede venir en cualquier idioma) junto con titulares de noticias "
+        "relacionadas. LEE BIEN esa información antes de escribir.\n\n"
         "Responde EXACTAMENTE en este formato, sin nada más:\n"
         f"CATEGORIA: <una de estas, la que mejor encaje: {', '.join(CATEGORIES)}>\n"
-        "TEXTO: <el dato curioso>\n\n"
-        "Para TEXTO: explica con precisión de qué se trata el tema y por qué es "
+        "PALABRAS_CLAVE: <2-4 palabras EN INGLES que describan el sujeto "
+        "visual principal (ej. nombre de la persona/equipo/lugar/cosa), para "
+        "buscar fotos reales>\n"
+        "TEXTO: <el dato curioso, en español>\n\n"
+        "Para TEXTO: traduce al español si el tema/titulares vienen en otro "
+        "idioma, y explica con precisión de qué se trata el tema y por qué es "
         "relevante ahora, en 2 o 3 oraciones naturales y bien desarrolladas (no "
         "un resumen apurado ni un titular copiado ni tu opinión) — el video dura "
         "entre 15 y 30 segundos narrado, así que apunta a unos 300-400 "
@@ -101,11 +111,12 @@ def _build_curious_text(term: str, news_titles: list[str]) -> tuple[str, str] | 
         "confiable para explicarlo bien, responde exactamente con TEXTO: SKIP. "
         "No inventes datos que no estén en los titulares."
     )
-    reply = groq_client.chat(system_prompt, context, max_tokens=240)
+    reply = groq_client.chat(system_prompt, context, max_tokens=260)
     if not reply:
         return None
 
     cat_match = re.search(r"CATEGOR[IÍ]A:\s*(.+)", reply, re.IGNORECASE)
+    keywords_match = re.search(r"PALABRAS_CLAVE:\s*(.+)", reply, re.IGNORECASE)
     text_match = re.search(r"TEXTO:\s*(.+)", reply, re.IGNORECASE | re.DOTALL)
     if not text_match:
         return None
@@ -115,7 +126,8 @@ def _build_curious_text(term: str, news_titles: list[str]) -> tuple[str, str] | 
         return None
 
     category = cat_match.group(1).strip() if cat_match else "Otros"
-    return category, text
+    keywords = keywords_match.group(1).strip() if keywords_match else term
+    return category, text, keywords
 
 
 def fetch_unused_trend(max_attempts: int = 8, category: str | None = None) -> dict | None:
@@ -124,7 +136,9 @@ def fetch_unused_trend(max_attempts: int = 8, category: str | None = None) -> di
     solo acepta temas que la IA clasifique en esa categoría -- prueba con
     varios temas de la lista hasta encontrar uno que encaje o agotar
     max_attempts. Sin fotos propias — el pipeline principal busca fotos en
-    Wikimedia Commons/Pexels usando `keywords` (el término de tendencia)."""
+    Wikimedia Commons/Pexels usando `keywords` (palabras en inglés que
+    sugiere la IA, no el término crudo -- útil cuando el tema viene en un
+    idioma que no da buenos resultados de búsqueda de imágenes)."""
     items = _fetch_trending_items()
     if not items:
         return None
@@ -144,7 +158,7 @@ def fetch_unused_trend(max_attempts: int = 8, category: str | None = None) -> di
         result = _build_curious_text(term, item["news"])
         if not result:
             continue
-        item_category, text = result
+        item_category, text, keywords = result
         if category and item_category.strip().lower() != category.strip().lower():
             continue
 
@@ -153,7 +167,7 @@ def fetch_unused_trend(max_attempts: int = 8, category: str | None = None) -> di
         return {
             "id": term_id,
             "category": "general",
-            "keywords": term,
+            "keywords": keywords,
             "text": text,
         }
     return None

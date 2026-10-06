@@ -1,9 +1,8 @@
 """
 Guarda/lee archivos en una carpeta de Google Drive. Se usa para que los
 videos generados y el registro de "no repetir" (used_facts.json,
-used_wikipedia.json) sobrevivan aunque la app en la nube (Streamlit Cloud)
-se reinicie y borre su disco local — Drive actúa como almacenamiento
-persistente externo.
+used_wikipedia.json) sobrevivan entre corridas y se puedan compartir entre
+equipos — Drive actúa como almacenamiento persistente externo.
 
 IMPORTANTE: se autentica como TU cuenta de Google (OAuth con refresh
 token), no como una cuenta de servicio — las cuentas de servicio no tienen
