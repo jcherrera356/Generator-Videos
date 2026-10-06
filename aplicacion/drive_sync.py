@@ -1,8 +1,9 @@
 """
 Capa de aplicación: sincroniza el video generado y el registro de "no
-repetir" (used_facts.json, used_wikipedia.json, used_games.json) con una
-carpeta de Google Drive, para que ese registro sobreviva aunque la app se
-reinicie en la nube y para compartirlo entre el .bat local y la app web.
+repetir" (used_facts.json, used_wikipedia.json, used_games.json,
+used_trends.json) con una carpeta de Google Drive, para que ese registro
+sobreviva aunque la app se reinicie en la nube y para compartirlo entre el
+.bat local y la app web.
 
 Usado tanto por presentacion/cli.py (el .bat local) como por
 presentacion/app.py (Streamlit), así la lógica vive en un solo lugar.
@@ -12,9 +13,14 @@ from pathlib import Path
 
 from aplicacion import generador_pipeline
 from datos import app_config
-from servicios import drive_storage, rawg_games, wikipedia_facts
+from servicios import drive_storage, google_trends, rawg_games, wikipedia_facts
 
-STATE_FILES = [generador_pipeline.USED_FILE, wikipedia_facts.USED_WIKI_FILE, rawg_games.USED_FILE]
+STATE_FILES = [
+    generador_pipeline.USED_FILE,
+    wikipedia_facts.USED_WIKI_FILE,
+    rawg_games.USED_FILE,
+    google_trends.USED_FILE,
+]
 
 
 def load_drive_service_from_config():

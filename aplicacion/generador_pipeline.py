@@ -47,7 +47,14 @@ import edge_tts
 from PIL import Image, ImageEnhance, ImageFilter
 
 from dominio import visuals
-from servicios import groq_client, pexels_photos, rawg_games, wikipedia_facts
+from servicios import (
+    google_trends,
+    groq_client,
+    pexels_photos,
+    rawg_games,
+    wikimedia_commons,
+    wikipedia_facts,
+)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 FACTS_FILE = BASE_DIR / "facts_bank.json"
@@ -86,6 +93,13 @@ OUTRO_PHRASES = [
 ]
 MAX_TOPIC_SEGMENTS = 4
 WIKIPEDIA_PROBABILITY = 0.5  # probabilidad de usar un dato de Wikipedia en vez del banco local
+
+# A ~15.5 caracteres/segundo medidos con la voz VOICE (es-MX-JorgeNeural):
+# 15s ~= 230 caracteres, 30s ~= 465 caracteres de guion completo
+# (intro + dato + outro). Se deja un margen de seguridad (~440 en vez de 465)
+# porque el ritmo real varía un poco por las pausas de puntuación. No se
+# fuerza un mínimo -- un dato corto del banco local se deja tal cual.
+MAX_SCRIPT_CHARS = 440
 
 DEFAULT_HASHTAGS = [
     "#datoscuriosos", "#curiosidades", "#sabiasque", "#parati", "#viral",
@@ -157,15 +171,33 @@ def pick_fact_from_games() -> dict:
     return pick_fact_from_local()
 
 
-def pick_fact(source: str = "auto") -> dict:
+def pick_fact_from_trending(category: str | None = None) -> dict:
+    """Elige un tema en tendencia ahora mismo (Google Trends, últimas 24h) y
+    arma un dato curioso sobre él con IA. Si se pasa `category` (una de
+    google_trends.CATEGORIES), solo acepta temas de esa categoría. Si falla
+    (Google movió el RSS de nuevo, sin internet, ningún tema de esa
+    categoría tiene contexto suficiente, etc.), cae al banco local para no
+    interrumpir la generación."""
+    trend_fact = google_trends.fetch_unused_trend(category=category)
+    if trend_fact:
+        return trend_fact
+    print("[!] No se pudo traer un tema de tendencia, se usa el banco local.")
+    return pick_fact_from_local()
+
+
+def pick_fact(source: str = "auto", trend_category: str | None = None) -> dict:
     """source: "wikipedia" (siempre Wikipedia, con respaldo al banco local
     si falla), "local" (siempre el banco fijo), "games" (siempre RAWG, con
-    el mismo respaldo), o "auto" (por defecto: al azar entre Wikipedia y
-    local según WIKIPEDIA_PROBABILITY, como antes)."""
+    el mismo respaldo), "trending" (siempre Google Trends, con el mismo
+    respaldo), o "auto" (por defecto: al azar entre Wikipedia y local según
+    WIKIPEDIA_PROBABILITY, como antes). `trend_category` solo aplica con
+    source="trending" (ver google_trends.CATEGORIES)."""
     if source == "wikipedia":
         return pick_fact_from_wikipedia()
     if source == "games":
         return pick_fact_from_games()
+    if source == "trending":
+        return pick_fact_from_trending(trend_category)
     if source == "local":
         return pick_fact_from_local()
 
@@ -535,6 +567,30 @@ def generate_caption(fact: dict) -> tuple[str, list[str]]:
     return title, hashtags
 
 
+def trim_to_duration_budget(fact_text: str, intro: str, outro: str) -> str:
+    """Recorta fact_text para que el guion completo (intro + dato + outro)
+    quepa en MAX_SCRIPT_CHARS (~30s de narración), sin cortar a media
+    oración. Si ya entra completo, lo devuelve igual."""
+    budget = MAX_SCRIPT_CHARS - len(intro) - len(outro)
+    if len(fact_text) <= budget:
+        return fact_text
+
+    sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", fact_text.strip()) if s.strip()]
+    trimmed = ""
+    for sentence in sentences:
+        candidate = f"{trimmed} {sentence}".strip() if trimmed else sentence
+        if len(candidate) > budget:
+            break
+        trimmed = candidate
+
+    if not trimmed:
+        # Ni la primera oración entera cabe: corta por palabra como último recurso.
+        trimmed = fact_text[:budget].rsplit(" ", 1)[0]
+    if not trimmed.endswith((".", "!", "?")):
+        trimmed += "."
+    return trimmed
+
+
 def save_caption_file(video_path: Path, title: str, hashtags: list[str], fact: dict | None = None) -> Path:
     caption_path = video_path.with_suffix(".txt")
     content = f"{title}\n\n{' '.join(hashtags)}\n"
@@ -542,20 +598,26 @@ def save_caption_file(video_path: Path, title: str, hashtags: list[str], fact: d
         # Requisito del plan gratuito de RAWG: atribuir la fuente con un
         # link activo donde se use su data/imágenes.
         content += "\nDatos e imágenes de videojuegos: RAWG (https://rawg.io)\n"
+    if fact and fact.get("photo_source") == "commons":
+        # La mayoría de fotos de Commons son CC-BY-SA u otra licencia libre
+        # que pide atribución.
+        content += "\nImágenes: Wikimedia Commons (https://commons.wikimedia.org)\n"
     caption_path.write_text(content, encoding="utf-8")
     return caption_path
 
 
-def main(source: str = "auto") -> Path:
-    """source: "wikipedia", "local", "games", o "auto" (mitad y mitad entre
-    Wikipedia y local) — ver pick_fact()."""
+def main(source: str = "auto", trend_category: str | None = None) -> Path:
+    """source: "wikipedia", "local", "games", "trending", o "auto" (mitad y
+    mitad entre Wikipedia y local) — ver pick_fact(). `trend_category` solo
+    aplica con source="trending" (ver google_trends.CATEGORIES)."""
     OUTPUT_DIR.mkdir(exist_ok=True)
     TMP_DIR.mkdir(exist_ok=True)
     MUSIC_DIR.mkdir(exist_ok=True)
 
-    fact = pick_fact(source)
+    fact = pick_fact(source, trend_category)
     intro = random.choice(INTRO_PHRASES)
     outro = random.choice(OUTRO_PHRASES)
+    fact["text"] = trim_to_duration_budget(fact["text"], intro, outro)
     script_text = f"{intro}{fact['text']}{outro}"
     print(f"[+] Dato elegido: {fact['id']}")
 
@@ -571,16 +633,22 @@ def main(source: str = "auto") -> Path:
     segments = split_script_segments(intro, fact["text"], outro, words)
     seg_times = segment_times(segments, words, duration)
 
+    topic = fact.get("keywords", fact["category"])
     if fact.get("photos"):
-        # Ya vienen incluidas (ej. capturas reales de RAWG) - no hace falta Pexels.
+        # Ya vienen incluidas (ej. capturas reales de RAWG) - no hace falta buscar.
         photos = fact["photos"]
-        print(f"[+] {len(photos)} foto(s) real(es) ya incluida(s) con el dato ({fact.get('keywords')})")
+        print(f"[+] {len(photos)} foto(s) real(es) ya incluida(s) con el dato ({topic})")
     else:
-        photos = pexels_photos.fetch_topic_photos(fact.get("keywords", fact["category"]), len(seg_times))
+        photos = wikimedia_commons.fetch_topic_photos(topic, len(seg_times))
         if photos:
-            print(f"[+] {len(photos)} foto(s) real(es) obtenida(s) ({fact.get('keywords')})")
+            fact["photo_source"] = "commons"
+            print(f"[+] {len(photos)} foto(s) real(es) obtenida(s) de Wikimedia Commons ({topic})")
         else:
-            print(f"[+] Sin fotos reales disponibles, se usará el ícono ilustrado ({fact['category']})")
+            photos = pexels_photos.fetch_topic_photos(topic, len(seg_times))
+            if photos:
+                print(f"[+] {len(photos)} foto(s) real(es) obtenida(s) de Pexels ({topic})")
+            else:
+                print(f"[+] Sin fotos reales disponibles, se usará el ícono ilustrado ({fact['category']})")
 
     bg_png = TMP_DIR / "bg.png"
     make_background_source(photos).save(bg_png)

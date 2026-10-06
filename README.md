@@ -30,7 +30,7 @@ obliga a tocar la capa de presentación ni la de aplicación.
 | **Presentación** | `presentacion/` | `app.py` (UI de Streamlit) y `cli.py` (entrada por consola, la que usa `generar_video.bat`) |
 | **Aplicación** | `aplicacion/` | `generador_pipeline.py` (orquesta todo el proceso de generar un video) y `drive_sync.py` (sincronización con Google Drive, compartida por los dos puntos de entrada) |
 | **Dominio** | `dominio/` | `visuals.py` (reglas de dibujo: íconos por categoría, personaje animado) |
-| **Servicios** | `servicios/` | Adaptadores a APIs externas: `wikipedia_facts.py`, `rawg_games.py`, `pexels_photos.py`, `groq_client.py`, `drive_storage.py` |
+| **Servicios** | `servicios/` | Adaptadores a APIs externas: `wikipedia_facts.py`, `rawg_games.py`, `google_trends.py`, `wikimedia_commons.py`, `pexels_photos.py`, `groq_client.py`, `drive_storage.py` |
 | **Datos** | `datos/` | `app_config.py`, que lee/escribe el único archivo de configuración local (`.config/config.json`) |
 
 Los archivos de datos/estado (`facts_bank.json`, `used_*.json`, `.config/`,
@@ -98,10 +98,10 @@ configuración en un solo lugar"), entonces cada vez que corras
 Si no tiene esa sección, el script sigue funcionando igual que antes, 100%
 local, sin tocar Drive.
 
-## De dónde sale cada dato (Wikipedia, banco local o videojuegos — sin repetir)
+## De dónde sale cada dato (Wikipedia, banco local, videojuegos o tendencias — sin repetir)
 
-`generate_video.main(source=...)` acepta tres fuentes (la app de Streamlit
-tiene un botón para cada una):
+`generador_pipeline.main(source=...)` acepta cuatro fuentes (la app de
+Streamlit tiene un botón para cada una, y `generar_video.bat` un menú):
 
 - `"wikipedia"` — un artículo aleatorio de la **API pública de Wikipedia**
   (sin API key). Registro de usados: `used_wikipedia.json`.
@@ -110,16 +110,56 @@ tiene un botón para cada una):
 - `"games"` — un videojuego al azar de la **API de RAWG**, con sus propias
   capturas de pantalla reales (ver sección de RAWG más abajo). Registro:
   `used_games.json`.
+- `"trending"` — un tema en tendencia **ahora mismo en Google** (últimas 24h,
+  Colombia) vía el RSS público de Google Trends, con el dato curioso
+  redactado por IA (Groq) a partir del tema y titulares de noticias
+  relacionadas. Si el tema es muy ambiguo o no hay contexto suficiente, la
+  IA lo descarta y se prueba con el siguiente tema de la lista. Registro:
+  `used_trends.json`. Ver `servicios/google_trends.py`.
 - `"auto"` (el que usa `python presentacion\cli.py` sin argumentos, por
   `generar_video.bat`) — **50% Wikipedia / 50% banco local**, al azar.
 
-Las tres fuentes caen automáticamente al banco local si fallan (sin
+Las cuatro fuentes caen automáticamente al banco local si fallan (sin
 internet, sin API key configurada, sin resultados nuevos tras varios
 intentos, etc.) — el video nunca falla por esto. Puedes ajustar la
 proporción de `"auto"` cambiando `WIKIPEDIA_PROBABILITY` en
-`aplicacion/generador_pipeline.py`. Los datos de Wikipedia usan la
-categoría `general` para el ícono de respaldo (ver `dominio/visuals.py`)
-ya que pueden ser sobre cualquier tema.
+`aplicacion/generador_pipeline.py`. Los datos de Wikipedia y de tendencias
+usan la categoría `general` para el ícono de respaldo (ver
+`dominio/visuals.py`) ya que pueden ser sobre cualquier tema.
+
+### Duración del video (15 a 30 segundos)
+
+Sin importar la fuente, el texto narrado se recorta (respetando oraciones
+completas, nunca a media frase) para que el video dure entre 15 y 30
+segundos — `trim_to_duration_budget()` y la constante `MAX_SCRIPT_CHARS` en
+`aplicacion/generador_pipeline.py` (calibrado a la velocidad real de la voz
+`VOICE`). Los datos de RAWG y de tendencias le piden a la IA que redacte 2-3
+oraciones bien desarrolladas usando a fondo el contexto que consiguió
+(descripción del juego, titulares de noticias, etc.) para apuntar a ese
+rango de forma natural, en vez de depender solo del recorte.
+
+### Tendencias (Google Trends)
+
+Usa el RSS público `https://trends.google.com/trending/rss`, el reemplazo
+de Google para su antigua función "Daily Trends" (la librería `pytrends` y
+su endpoint viejo dejaron de funcionar). Sin API key. Solo trae ~10-20
+temas de las últimas 24h, así que una categoría puntual puede no tener nada
+casi cualquier día — en ese caso cae al banco local como siempre, el video
+nunca falla por esto. El país se fija en la constante `COUNTRY` de
+`servicios/google_trends.py` (por defecto `"CO"`, Colombia).
+
+**Categoría**: elegible en `generar_video.bat` (submenú tras elegir
+"Tendencias"), en la app de Streamlit (selector), o como segundo argumento
+de `python presentacion\cli.py` — Videojuegos, Noticias, Moda,
+Entretenimiento, Tecnología, Deportes, Negocios, Salud o Ciencia (lista
+completa en `google_trends.CATEGORIES`). Como Google no deja filtrar su RSS
+por categoría (se probó con varios parámetros, los ignora todos), la IA
+clasifica cada tema al mismo tiempo que redacta el dato y descarta los que
+no coincidan.
+
+```powershell
+python presentacion\cli.py trending Videojuegos
+```
 
 ## Videojuegos (API gratuita de RAWG)
 
@@ -185,28 +225,44 @@ Edita `facts_bank.json` y agrega objetos con este formato:
   en su banco de imágenes). Se reutiliza para las varias fotos que van
   apareciendo a lo largo del video (una por oración, hasta 4).
 
-## Fotos reales que cambian a medida que se habla (API gratuita de Pexels)
+## Fotos reales que cambian a medida que se habla (Wikimedia Commons + Pexels)
 
 Cada video divide el guion por oraciones (hasta 4 tramos) y busca una foto
 real distinta para cada una, así la imagen va cambiando junto con lo que se
 está diciendo. La primera foto también se usa (borrosa y oscurecida) como
 fondo de pantalla completa, para que el fondo tenga que ver con el tema en
-vez de ser un degradado genérico. Si no hay conexión, no hay clave
-configurada, o no se encuentra ninguna foto, el script cae automáticamente al
-ícono ilustrado de la categoría como respaldo — nunca falla el video por esto.
+vez de ser un degradado genérico. Si no se encuentra ninguna foto, el script
+cae automáticamente al ícono ilustrado de la categoría como respaldo — nunca
+falla el video por esto. (Los videos de la fuente `"games"` no pasan por
+aquí — usan directo las capturas reales de RAWG, ver sección de arriba).
 
-Para activarlo (dos minutos, sin tarjeta de crédito):
+Se busca en dos fuentes, en este orden:
 
-1. Entra a https://www.pexels.com/api/ y crea una cuenta gratuita.
-2. Copia tu API key gratuita.
-3. Pégala en `.config/config.json` (ver "Toda la configuración en un solo
-   lugar" más abajo):
-   ```json
-   {"pexels_api_key": "TU_API_KEY_AQUI"}
-   ```
+1. **Wikimedia Commons** (`servicios/wikimedia_commons.py`) — el banco de
+   imágenes de Wikipedia. Sin API key, sin registro. Es la fuente
+   **principal** porque, a diferencia de un banco de fotos de stock, sí
+   tiene fotos reales de personas, lugares y eventos específicos (útil sobre
+   todo para `"wikipedia"` y `"trending"`, donde el tema suele ser algo muy
+   puntual). La mayoría de sus fotos son de uso libre pero piden atribución
+   — por eso se agrega automáticamente una línea al `.txt` del video cuando
+   las fotos vienen de aquí.
+2. **Pexels** (API gratuita) — respaldo para cuando Commons no encuentra
+   nada razonable (temas genéricos tipo "océano" o "animales", donde sí
+   sobran fotos de stock). Para activarlo (dos minutos, sin tarjeta de
+   crédito):
 
-El plan gratuito de Pexels permite 200 solicitudes por hora / 20,000 al mes,
-más que suficiente para generar un video por hora.
+   1. Entra a https://www.pexels.com/api/ y crea una cuenta gratuita.
+   2. Copia tu API key gratuita.
+   3. Pégala en `.config/config.json` (ver "Toda la configuración en un
+      solo lugar" más abajo):
+      ```json
+      {"pexels_api_key": "TU_API_KEY_AQUI"}
+      ```
+   El plan gratuito de Pexels permite 200 solicitudes por hora / 20,000 al
+   mes, más que suficiente para generar un video por hora.
+
+Si no configuras Pexels, el pipeline sigue funcionando igual — solo usa
+Commons, y si tampoco encuentra nada, cae al ícono ilustrado.
 
 ## El personaje animado
 
@@ -337,37 +393,34 @@ nada — ya es tuya. Solo copia el **ID de la carpeta** desde la URL:
 
 Y reemplázalo en el `folder_id` del bloque que copiaste en el paso 2.
 
-### Paso 4: Configurar los Secrets en Streamlit Cloud
+### Paso 4: Subir `.config/config.json` y desplegar
 
-1. Entra a https://share.streamlit.io/ e inicia sesión con tu cuenta de
-   GitHub. **"New app"** → elige el repositorio `Generator-Videos` →
-   archivo principal: `presentacion/app.py` → Deploy. (Si ya tenías esta
-   app desplegada desde antes de la reorganización en capas, entra a
-   **Settings → General → Main file path** y cámbialo a
-   `presentacion/app.py`, porque el `app.py` de la raíz ya no existe).
-2. Desde el panel de la app → **"Settings" → "Secrets"**, pega:
+`presentacion/app.py` lee la configuración directo de `.config/config.json`
+(lo mismo que usa el `.bat` local) en vez de pedir los Secrets de
+Streamlit — así no hay que pegar nada a mano ahí. Para esto:
 
-   ```toml
-   [gdrive]
-   folder_id = "EL-ID-DE-TU-CARPETA"
-   client_id = "EL-CLIENT-ID-DEL-PASO-2"
-   client_secret = "EL-CLIENT-SECRET-DEL-PASO-2"
-   refresh_token = "EL-REFRESH-TOKEN-DEL-PASO-2"
+> ⚠️ **El repo DEBE ser privado.** `.config/config.json` tiene tus API keys
+> y, lo más sensible, el `refresh_token` de Google Drive — con eso cualquiera
+> tendría acceso a tu carpeta de Drive. Si el repo es público, **no subas
+> este archivo** (el `.gitignore` original lo protegía justo por esto).
+> Para hacerlo privado: Settings del repo en GitHub → "Danger Zone" →
+> "Change visibility" → "Private".
 
-   [pexels]
-   api_key = "TU_API_KEY_DE_PEXELS"
-
-   [groq]
-   api_key = "TU_API_KEY_DE_GROQ"
-
-   [rawg]
-   api_key = "TU_API_KEY_DE_RAWG"
+1. Con el repo ya en privado, agrega `.config/config.json` a git (está
+   excluido de `.gitignore` a propósito) y súbelo:
+   ```powershell
+   git add .config/config.json
+   git commit -m "Agrega config para Streamlit Cloud"
+   git push
    ```
+2. Entra a https://share.streamlit.io/ e inicia sesión con tu cuenta de
+   GitHub. **"New app"** → autoriza acceso a repos privados si lo pide →
+   elige el repositorio `Generator-Videos` → archivo principal:
+   `presentacion/app.py` → Deploy. (Si ya tenías esta app desplegada desde
+   antes de la reorganización en capas, entra a **Settings → General →
+   Main file path** y cámbialo a `presentacion/app.py`).
 
-   (Las API keys son las mismas que ya tienes en `.config/config.json` —
-   ábrelo y copia el valor de cada una.)
-
-3. Guarda los secrets — la app se reinicia sola y queda lista.
+No hace falta tocar la pestaña "Secrets" para nada.
 
 ### Limitaciones a tener en cuenta
 
@@ -379,7 +432,12 @@ Y reemplázalo en el `folder_id` del bloque que copiaste en el paso 2.
 - El `refresh_token` no expira mientras uses la app regularmente, pero si
   Google lo invalida (por ejemplo si revocas el acceso desde tu cuenta de
   Google), hay que correr `setup_google_drive/google_drive_auth.py` de
-  nuevo y actualizar el secret en Streamlit.
+  nuevo, actualizar `.config/config.json`, y volver a hacer `git push`.
+- Si alguna vez vuelves a hacer el repo público, **saca `.config/config.json`
+  de git primero** (`git rm --cached .config/config.json`, agrégalo de
+  nuevo al `.gitignore`, y regenera todas las credenciales — el
+  `refresh_token` viejo queda en el historial de git para siempre aunque
+  borres el archivo).
 - Nunca subas `oauth_client.json` a GitHub — ya está en el `.gitignore`,
   pero verifícalo si algo falla.
 

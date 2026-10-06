@@ -1,0 +1,11 @@
+{
+  "pexels_api_key": "nnOCbXLtdaiVC8fTHZSsSWD1lNyYb3VvCa69musStCXPyVKTnj2P3ESH",
+  "groq_api_key": "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",
+  "rawg_api_key": "153d390c69b84096b3c8868de4c2b903",
+  "gdrive": {
+    "folder_id": "1EXJMY_OpD7rXxePU7YUqua75eWmSKeag",
+    "client_id": "925147978963-gra2h76k22dclvpkl74l6k6ct85o758v.apps.googleusercontent.com",
+    "client_secret": "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",
+    "refresh_token": "1//05rY_PJkUVeXeCgYIARAAGAUSNwF-L9IrilzS7TLPQoBjWajtubgoxfdhoZ-DhJw0PUsE5vK7DTvf4janhlkj5e1-SppereZeMV8"
+  }
+}

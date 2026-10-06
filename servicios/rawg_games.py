@@ -142,14 +142,19 @@ def _build_curious_text(
     system_prompt = (
         "Eres un redactor de 'datos curiosos' sobre videojuegos para TikTok, en "
         "español neutro. Te paso información en inglés y/o español sobre un "
-        "juego; tu trabajo es traducir y resumir en 2 a 4 oraciones naturales y "
-        "curiosas (nunca una ficha técnica ni una lista). Prioriza curiosidades "
-        "reales si aparecen en la información: historia de desarrollo, récords, "
-        "polémicas, easter eggs, cifras de ventas o impacto cultural. Varía la "
-        "redacción y el inicio de cada respuesta, no uses siempre la misma "
-        "estructura. No inventes datos que no estén en la información dada. "
-        "Responde SOLO con el texto final en español, sin comillas, sin "
-        "encabezados ni explicaciones."
+        "juego (descripción oficial, extracto de Wikipedia si hay, género, "
+        "desarrollador, plataformas, calificación). LEE BIEN toda esa "
+        "información antes de escribir — tu trabajo es encontrar la curiosidad "
+        "más interesante que realmente esté ahí (historia de desarrollo, "
+        "récords, polémicas, easter eggs, cifras de ventas, impacto cultural) "
+        "y traducirla a 2 o 3 oraciones naturales y curiosas, bien desarrolladas "
+        "(no una ficha técnica ni una lista ni un resumen apurado) — el video "
+        "dura entre 15 y 30 segundos narrado, así que apunta a unos 300-400 "
+        "caracteres en total. Varía la redacción y el inicio de cada "
+        "respuesta, no uses siempre la misma estructura. No inventes datos que "
+        "no estén en la información dada — si no hay nada realmente curioso, "
+        "describe bien el juego en vez de inventar. Responde SOLO con el texto "
+        "final en español, sin comillas, sin encabezados ni explicaciones."
     )
     return groq_client.chat(system_prompt, "\n".join(context_lines), max_tokens=220)
 
