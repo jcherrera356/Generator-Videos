@@ -26,7 +26,7 @@ obliga a tocar la capa de presentación ni la de aplicación.
 | **Presentación** | `presentacion/` | `cli.py` (entrada por consola, la que usa `generar_video.bat`) |
 | **Aplicación** | `aplicacion/` | `generador_pipeline.py` (orquesta todo el proceso de generar un video) y `drive_sync.py` (sincronización con Google Drive) |
 | **Dominio** | `dominio/` | `visuals.py` (reglas de dibujo: íconos por categoría, personaje animado) |
-| **Servicios** | `servicios/` | Adaptadores a APIs externas: `wikipedia_facts.py`, `rawg_games.py`, `google_trends.py`, `wikimedia_commons.py`, `pexels_photos.py`, `groq_client.py`, `drive_storage.py` |
+| **Servicios** | `servicios/` | Adaptadores a APIs externas: `wikipedia_facts.py`, `rawg_games.py`, `google_trends.py`, `wikimedia_commons.py`, `pexels_photos.py`, `pixabay_photos.py`, `groq_client.py`, `drive_storage.py` |
 | **Datos** | `datos/` | `app_config.py`, que lee/escribe el único archivo de configuración local (`.config/config.json`) |
 
 Los archivos de datos/estado (`facts_bank.json`, `used_*.json`, `.config/`,
@@ -247,7 +247,7 @@ Edita `facts_bank.json` y agrega objetos con este formato:
   en su banco de imágenes). Se reutiliza para las varias fotos que van
   apareciendo a lo largo del video (una por oración, hasta 4).
 
-## Fotos reales que cambian a medida que se habla (Wikimedia Commons + Pexels)
+## Fotos reales que cambian a medida que se habla (Pixabay + Wikimedia Commons + Pexels)
 
 Cada video divide el guion por oraciones (hasta 4 tramos) y busca una foto
 real distinta para cada una, así la imagen va cambiando junto con lo que se
@@ -258,33 +258,51 @@ cae automáticamente al ícono ilustrado de la categoría como respaldo — nunc
 falla el video por esto. (Los videos de la fuente `"games"` no pasan por
 aquí — usan directo las capturas reales de RAWG, ver sección de arriba).
 
-Se busca en dos fuentes, en este orden:
+Se combinan tres fuentes, en este orden, completando entre todas las fotos
+que falten (no es "la primera que traiga algo se queda con todo" — si una
+fuente trae 1 de las 3 fotos necesarias, las otras 2 fuentes completan el
+resto):
 
-1. **Wikimedia Commons** (`servicios/wikimedia_commons.py`) — el banco de
-   imágenes de Wikipedia. Sin API key, sin registro. Es la fuente
-   **principal** porque, a diferencia de un banco de fotos de stock, sí
-   tiene fotos reales de personas, lugares y eventos específicos (útil sobre
-   todo para `"wikipedia"` y `"trending"`, donde el tema suele ser algo muy
-   puntual). La mayoría de sus fotos son de uso libre pero piden atribución
-   — por eso se agrega automáticamente una línea al `.txt` del video cuando
-   las fotos vienen de aquí.
-2. **Pexels** (API gratuita) — respaldo para cuando Commons no encuentra
-   nada razonable (temas genéricos tipo "océano" o "animales", donde sí
-   sobran fotos de stock). Para activarlo (dos minutos, sin tarjeta de
-   crédito):
+1. **Pixabay** (`servicios/pixabay_photos.py`, API gratuita) — fuente
+   **principal**. Para evitar que su búsqueda, bastante laxa (puede traer
+   una foto que solo coincide en una palabra suelta de varias, ej. buscar
+   "deadpool cosplay" y traer una foto etiquetada solo "cosplay" sin
+   relación real), se descarta cualquier resultado cuyas etiquetas no
+   contengan TODAS las palabras significativas de la búsqueda.
+2. **Wikimedia Commons** (`servicios/wikimedia_commons.py`) — el banco de
+   imágenes de Wikipedia, sin API key. Completa lo que falte, sobre todo
+   útil para personas, lugares y eventos específicos, o personajes de
+   franquicias con copyright buscando fotos reales de cosplay/actores en
+   vez del personaje con derechos de autor (ver banco local). La mayoría de
+   sus fotos son de uso libre pero piden atribución — por eso se agrega
+   automáticamente una línea al `.txt` del video cuando las fotos vienen de
+   aquí.
+3. **Pexels** (API gratuita) — completa lo que aún falte.
 
-   1. Entra a https://www.pexels.com/api/ y crea una cuenta gratuita.
-   2. Copia tu API key gratuita.
-   3. Pégala en `.config/config.json` (ver "Toda la configuración en un
-      solo lugar" más abajo):
-      ```json
-      {"pexels_api_key": "TU_API_KEY_AQUI"}
-      ```
-   El plan gratuito de Pexels permite 200 solicitudes por hora / 20,000 al
-   mes, más que suficiente para generar un video por hora.
+Si con la frase completa no alcanza para juntar todas las fotos
+necesarias, se vuelve a intentar con cada palabra suelta de la búsqueda por
+separado (en las tres fuentes), para sumar variedad en vez de quedarse
+corto o repetir.
 
-Si no configuras Pexels, el pipeline sigue funcionando igual — solo usa
-Commons, y si tampoco encuentra nada, cae al ícono ilustrado.
+Para activar Pexels y/o Pixabay (dos minutos cada una, sin tarjeta de
+crédito):
+
+- Pexels: https://www.pexels.com/api/ → copia tu API key → en
+  `.config/config.json` (ver "Toda la configuración en un solo lugar" más
+  abajo): `{"pexels_api_key": "TU_API_KEY_AQUI"}`. Plan gratuito: 200
+  solicitudes por hora / 20,000 al mes.
+- Pixabay: https://pixabay.com/api/docs/ (crea cuenta, la API key aparece
+  arriba de esa misma página) → `{"pixabay_api_key": "TU_API_KEY_AQUI"}`.
+
+No hace falta tener las tres — el pipeline sigue funcionando igual con
+cualquier combinación, y si ninguna está configurada o ninguna encuentra
+nada, cae al ícono ilustrado.
+
+> ⚠️ **Google Images** no tiene API gratuita real para esto — su "Custom
+> Search API" oficial solo da 100 consultas gratis al día (después cobra) y
+> requiere configurar un "Programmable Search Engine" en Google Cloud.
+> Scrapear Google Images directamente violaría sus términos de servicio, así
+> que no se implementó.
 
 ## El personaje animado
 

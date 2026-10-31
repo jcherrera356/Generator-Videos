@@ -57,7 +57,18 @@ if "%SOURCE%"=="trending" (
     if "!OPCION_CAT!"=="10" set "CATEGORIA=Ciencia"
 )
 
-python presentacion\cli.py %SOURCE% %CATEGORIA%
+echo.
+set /p CANTIDAD="Cuantos videos generar? (Enter = 1): "
+if not defined CANTIDAD set "CANTIDAD=1"
+set /a CANTIDAD=CANTIDAD 2>nul
+if not defined CANTIDAD set "CANTIDAD=1"
+if %CANTIDAD% LSS 1 set "CANTIDAD=1"
+
+for /L %%i in (1,1,%CANTIDAD%) do (
+    echo.
+    echo ===== Video %%i de %CANTIDAD% =====
+    python presentacion\cli.py %SOURCE% %CATEGORIA%
+)
 
 echo.
 pause

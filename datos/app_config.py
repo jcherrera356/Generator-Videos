@@ -8,6 +8,7 @@ groq_config.json, rawg_config.json, gdrive_config.json). No se sube a git
 Formato esperado:
 {
   "pexels_api_key": "...",
+  "pixabay_api_key": "...",
   "groq_api_key": "...",
   "rawg_api_key": "...",
   "gdrive": {
@@ -47,6 +48,10 @@ def save(data: dict) -> None:
 
 def get_pexels_api_key() -> str | None:
     return (_load().get("pexels_api_key") or "").strip() or None
+
+
+def get_pixabay_api_key() -> str | None:
+    return (_load().get("pixabay_api_key") or "").strip() or None
 
 
 def get_groq_api_key() -> str | None:

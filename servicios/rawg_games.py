@@ -21,6 +21,7 @@ respaldo — el video nunca falla por esto.
 
 import json
 import random
+from datetime import date, timedelta
 from io import BytesIO
 from pathlib import Path
 
@@ -191,20 +192,34 @@ def _fallback_text(
 
 def fetch_unused_game(max_attempts: int = 8) -> dict | None:
     """Devuelve un dato (mismo formato que facts_bank.json, más una lista
-    de fotos reales ya descargadas) sobre un videojuego no usado antes."""
+    de fotos reales ya descargadas) sobre un videojuego no usado antes.
+
+    Alterna 50/50 entre dos modos, ambos ordenados por "-added" (cuántos
+    usuarios de RAWG tienen el juego en su lista -- el indicador real de
+    popularidad/fama en su API, a diferencia de "-rating" que favorecía
+    juegos viejos y poco conocidos con pocas calificaciones perfectas):
+      - "clasico": los juegos más populares de todos los tiempos.
+      - "nuevo": los más populares lanzados en el último año (tendencia
+        actual), con un rango de páginas más corto porque hay menos
+        volumen y la calidad baja más rápido entrando a la página 4-5.
+    """
     api_key = app_config.get_rawg_api_key()
     if not api_key:
         return None
 
     used = _load_used()
     for _ in range(max_attempts):
-        page = random.randint(1, 15)
+        params = {"key": api_key, "ordering": "-added", "page_size": 20}
+        if random.random() < 0.5:
+            params["page"] = random.randint(1, 15)
+        else:
+            today = date.today()
+            start = today - timedelta(days=365)
+            params["dates"] = f"{start.isoformat()},{today.isoformat()}"
+            params["page"] = random.randint(1, 3)
+
         try:
-            response = requests.get(
-                f"{API_BASE}/games",
-                params={"key": api_key, "ordering": "-rating", "page_size": 20, "page": page},
-                timeout=10,
-            )
+            response = requests.get(f"{API_BASE}/games", params=params, timeout=10)
             response.raise_for_status()
             results = response.json().get("results", [])
         except requests.RequestException:

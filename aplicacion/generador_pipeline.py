@@ -51,6 +51,7 @@ from servicios import (
     google_trends,
     groq_client,
     pexels_photos,
+    pixabay_photos,
     rawg_games,
     wikimedia_commons,
     wikipedia_facts,
@@ -229,23 +230,38 @@ def make_background_source(photos: list[Image.Image]) -> Image.Image:
     return ImageEnhance.Brightness(blurred).enhance(0.55)
 
 
-async def synthesize(text: str, audio_path: Path) -> list[dict]:
-    """Genera el audio y devuelve el timing de cada palabra (en segundos)."""
-    communicate = edge_tts.Communicate(text, VOICE, boundary="WordBoundary")
-    word_boundaries = []
-    with open(audio_path, "wb") as f:
-        async for chunk in communicate.stream():
-            if chunk["type"] == "audio":
-                f.write(chunk["data"])
-            elif chunk["type"] == "WordBoundary":
-                word_boundaries.append(
-                    {
-                        "text": chunk["text"],
-                        "start": chunk["offset"] / 10_000_000,
-                        "end": (chunk["offset"] + chunk["duration"]) / 10_000_000,
-                    }
-                )
-    return word_boundaries
+async def synthesize(text: str, audio_path: Path, max_attempts: int = 3) -> list[dict]:
+    """Genera el audio y devuelve el timing de cada palabra (en segundos).
+    edge-tts es un servicio no oficial (reutiliza la voz de Microsoft Edge
+    gratis) y a veces falla transitoriamente (403, conexión rechazada,
+    etc.), sobre todo al generar varios videos seguidos -- se reintenta
+    unas veces antes de dar el error por definitivo."""
+    last_error: Exception | None = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            communicate = edge_tts.Communicate(text, VOICE, boundary="WordBoundary")
+            word_boundaries = []
+            with open(audio_path, "wb") as f:
+                async for chunk in communicate.stream():
+                    if chunk["type"] == "audio":
+                        f.write(chunk["data"])
+                    elif chunk["type"] == "WordBoundary":
+                        word_boundaries.append(
+                            {
+                                "text": chunk["text"],
+                                "start": chunk["offset"] / 10_000_000,
+                                "end": (chunk["offset"] + chunk["duration"]) / 10_000_000,
+                            }
+                        )
+            if not word_boundaries:
+                raise RuntimeError("edge-tts no devolvió audio (respuesta vacía)")
+            return word_boundaries
+        except Exception as exc:  # noqa: BLE001 - reintento genérico a propósito
+            last_error = exc
+            if attempt < max_attempts:
+                print(f"[!] edge-tts falló (intento {attempt}/{max_attempts}): {exc}. Reintentando...")
+                await asyncio.sleep(3)
+    raise last_error
 
 
 def group_words(words: list[dict], chunk_size: int = 4) -> list[dict]:
@@ -606,6 +622,52 @@ def save_caption_file(video_path: Path, title: str, hashtags: list[str], fact: d
     return caption_path
 
 
+# Orden de fuentes de fotos: Pixabay es la principal, Commons y Pexels
+# completan lo que falte. Cada función recibe (keyword, cuántas faltan).
+_PHOTO_SOURCES = [
+    ("Pixabay", pixabay_photos.fetch_topic_photos),
+    ("Wikimedia Commons", wikimedia_commons.fetch_topic_photos),
+    ("Pexels", pexels_photos.fetch_topic_photos),
+]
+
+
+def fetch_real_photos(topic: str, count: int, fact: dict) -> list[Image.Image]:
+    """Junta hasta `count` fotos reales combinando las fuentes de
+    _PHOTO_SOURCES en orden, cada una completando lo que falte (en vez de
+    que "la primera fuente que traiga algo se quede con todo") -- así, si
+    Pixabay no tiene nada bueno para un tema muy específico, Commons o
+    Pexels pueden aportar las fotos que falten en vez de quedar bloqueados.
+    Si ni siquiera así se junta `count`, reintenta con cada palabra suelta
+    de `topic` para sumar variedad. Marca `fact["photo_source"] = "commons"`
+    si alguna foto vino de ahí (para la atribución en el .txt)."""
+    photos: list[Image.Image] = []
+
+    def _missing() -> int:
+        return count - len(photos)
+
+    def _try_all(query: str) -> None:
+        for label, fetch_fn in _PHOTO_SOURCES:
+            if _missing() <= 0:
+                return
+            new_photos = fetch_fn(query, _missing())
+            if not new_photos:
+                continue
+            if label == "Wikimedia Commons":
+                fact["photo_source"] = "commons"
+            photos.extend(new_photos)
+            print(f"[+] {len(new_photos)} foto(s) real(es) obtenida(s) de {label} ({query})")
+
+    _try_all(topic)
+
+    if _missing() > 0:
+        for word in [w for w in topic.split() if len(w) > 2]:
+            if _missing() <= 0:
+                break
+            _try_all(word)
+
+    return photos
+
+
 def main(source: str = "auto", trend_category: str | None = None) -> Path:
     """source: "wikipedia", "local", "games", "trending", o "auto" (mitad y
     mitad entre Wikipedia y local) — ver pick_fact(). `trend_category` solo
@@ -639,16 +701,9 @@ def main(source: str = "auto", trend_category: str | None = None) -> Path:
         photos = fact["photos"]
         print(f"[+] {len(photos)} foto(s) real(es) ya incluida(s) con el dato ({topic})")
     else:
-        photos = wikimedia_commons.fetch_topic_photos(topic, len(seg_times))
-        if photos:
-            fact["photo_source"] = "commons"
-            print(f"[+] {len(photos)} foto(s) real(es) obtenida(s) de Wikimedia Commons ({topic})")
-        else:
-            photos = pexels_photos.fetch_topic_photos(topic, len(seg_times))
-            if photos:
-                print(f"[+] {len(photos)} foto(s) real(es) obtenida(s) de Pexels ({topic})")
-            else:
-                print(f"[+] Sin fotos reales disponibles, se usará el ícono ilustrado ({fact['category']})")
+        photos = fetch_real_photos(topic, len(seg_times), fact)
+        if not photos:
+            print(f"[+] Sin fotos reales disponibles, se usará el ícono ilustrado ({fact['category']})")
 
     bg_png = TMP_DIR / "bg.png"
     make_background_source(photos).save(bg_png)
