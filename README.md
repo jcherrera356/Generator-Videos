@@ -24,15 +24,14 @@ obliga a tocar la capa de presentación ni la de aplicación.
 | Capa | Carpeta | Contiene |
 |---|---|---|
 | **Presentación** | `presentacion/` | `cli.py` (entrada por consola, la que usa `generar_video.bat`) |
-| **Aplicación** | `aplicacion/` | `generador_pipeline.py` (orquesta todo el proceso de generar un video) y `drive_sync.py` (sincronización con Google Drive) |
+| **Aplicación** | `aplicacion/` | `generador_pipeline.py` (orquesta todo el proceso de generar un video) y `drive_sync.py` (sube el video resultante a Google Drive) |
 | **Dominio** | `dominio/` | `visuals.py` (reglas de dibujo: íconos por categoría, personaje animado) |
-| **Servicios** | `servicios/` | Adaptadores a APIs externas: `wikipedia_facts.py`, `rawg_games.py`, `google_trends.py`, `wikimedia_commons.py`, `pexels_photos.py`, `pixabay_photos.py`, `groq_client.py`, `drive_storage.py` |
+| **Servicios** | `servicios/` | Adaptadores a APIs externas: `wikipedia_facts.py`, `rawg_games.py`, `google_trends.py`, `wikimedia_commons.py`, `pexels_photos.py`, `pixabay_photos.py`, `groq_client.py`, `drive_storage.py`, `sql_database.py`/`usados_db.py` (registro de "no repetir" en SQL Server) |
 | **Datos** | `datos/` | `app_config.py`, que lee/escribe el único archivo de configuración local (`.config/config.json`) |
 
-Los archivos de datos/estado (`facts_bank.json`, `used_*.json`, `.config/`,
-`output/`, `tmp/`, `music/`) quedan en la raíz del proyecto — son datos y
-estado en tiempo de ejecución, no código, así que no forman parte de las
-capas.
+Los archivos de datos/estado (`facts_bank.json`, `.config/`, `output/`,
+`tmp/`, `music/`) quedan en la raíz del proyecto — son datos y estado en
+tiempo de ejecución, no código, así que no forman parte de las capas.
 
 ## Toda la configuración en un solo lugar
 
@@ -45,6 +44,12 @@ en **un solo archivo local**, `.config/config.json` (no se sube a git — ver
   "pexels_api_key": "...",
   "groq_api_key": "...",
   "rawg_api_key": "...",
+  "sql_server": {
+    "server": "...",
+    "database": "...",
+    "user": "...",
+    "password": "..."
+  },
   "gdrive": {
     "folder_id": "...",
     "client_id": "...",
@@ -80,17 +85,13 @@ del mismo nombre con el título y los hashtags sugeridos para esa publicación
 ### Sincronizar con Google Drive (opcional)
 
 Si `.config/config.json` tiene la sección `"gdrive"` (ver más abajo "Toda la
-configuración en un solo lugar"), entonces cada vez que corras
-`generar_video.bat` o `python presentacion\cli.py`:
+configuración en un solo lugar"), después de generar cada video
+`generar_video.bat` / `python presentacion\cli.py` sube el video y su `.txt`
+de título/hashtags a esa carpeta de Drive. Si no tiene esa sección, el
+script sigue funcionando igual, 100% local, sin tocar Drive.
 
-1. Antes de generar, descarga desde Drive `used_facts.json`,
-   `used_wikipedia.json`, `used_games.json` y `used_trends.json` — así no
-   repite un dato ya usado, útil si generas videos desde más de un equipo.
-2. Después de generar, sube el video, su `.txt` de título/hashtags, y esos
-   mismos registros actualizados a esa carpeta de Drive.
-
-Si no tiene esa sección, el script sigue funcionando igual, 100% local, sin
-tocar Drive.
+(El registro de "no repetir" ya no pasa por Drive — ver la sección de SQL
+Server más abajo.)
 
 **Para configurarlo** (una sola vez):
 
@@ -123,20 +124,51 @@ porque solo hace falta correrlos una vez, o de nuevo si Google invalida el
 las ofrece en un menú):
 
 - `"wikipedia"` — un artículo aleatorio de la **API pública de Wikipedia**
-  (sin API key). Registro de usados: `used_wikipedia.json`.
-- `"local"` — el banco fijo `facts_bank.json` (35 datos escritos a mano).
-  Registro: `used_facts.json` (se reinicia solo al agotarlos).
+  (sin API key). Categoría de registro: `wikipedia`.
+- `"local"` — el banco fijo `facts_bank.json` (51 datos escritos a mano).
+  Categoría: `facts` (se reinicia sola al agotarlos).
 - `"games"` — un videojuego al azar de la **API de RAWG**, con sus propias
-  capturas de pantalla reales (ver sección de RAWG más abajo). Registro:
-  `used_games.json`.
+  capturas de pantalla reales (ver sección de RAWG más abajo). Categoría:
+  `games`.
 - `"trending"` — un tema en tendencia **ahora mismo en Google** (últimas 24h,
   Colombia) vía el RSS público de Google Trends, con el dato curioso
   redactado por IA (Groq) a partir del tema y titulares de noticias
   relacionadas. Si el tema es muy ambiguo o no hay contexto suficiente, la
-  IA lo descarta y se prueba con el siguiente tema de la lista. Registro:
-  `used_trends.json`. Ver `servicios/google_trends.py`.
+  IA lo descarta y se prueba con el siguiente tema de la lista. Categoría:
+  `trends`. Ver `servicios/google_trends.py`.
 - `"auto"` (el que usa `python presentacion\cli.py` sin argumentos, por
   `generar_video.bat`) — **50% Wikipedia / 50% banco local**, al azar.
+
+### Registro de "no repetir" (SQL Server)
+
+Para no repetir el mismo dato/juego/artículo/tendencia en videos futuros, el
+pipeline guarda lo ya usado en una tabla `videosApp.DatosUsados` de SQL
+Server (ver `servicios/sql_database.py` y `servicios/usados_db.py`) en vez
+de archivos locales — así el registro se comparte entre todos los equipos
+que generen videos sin importar quién corra primero, sin el riesgo de que
+uno pise el progreso del otro (que sí podía pasar con archivos
+sincronizados por Drive). El schema `videosApp` agrupa las tablas de este
+proyecto dentro de la base de datos, separadas de otras apps que vivan en
+el mismo server compartido.
+
+Crea el schema y la tabla una sola vez:
+
+```sql
+CREATE SCHEMA videosApp;
+GO
+
+CREATE TABLE videosApp.DatosUsados (
+    id INT IDENTITY(1,1) PRIMARY KEY,
+    categoria NVARCHAR(20) NOT NULL,
+    clave NVARCHAR(700) NOT NULL,
+    fecha_agregado DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+    CONSTRAINT UQ_DatosUsados_categoria_clave UNIQUE (categoria, clave)
+)
+```
+
+Y agrega las credenciales en `.config/config.json` (ver `"sql_server"` más
+arriba). Si no están configuradas, o el servidor no responde, el pipeline
+sigue generando video igual — simplemente esa corrida no filtra repetidos.
 
 Las cuatro fuentes caen automáticamente al banco local si fallan (sin
 internet, sin API key configurada, sin resultados nuevos tras varios

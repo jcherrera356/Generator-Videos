@@ -53,13 +53,13 @@ from servicios import (
     pexels_photos,
     pixabay_photos,
     rawg_games,
+    usados_db,
     wikimedia_commons,
     wikipedia_facts,
 )
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 FACTS_FILE = BASE_DIR / "facts_bank.json"
-USED_FILE = BASE_DIR / "used_facts.json"
 MUSIC_DIR = BASE_DIR / "music"
 OUTPUT_DIR = BASE_DIR / "output"
 TMP_DIR = BASE_DIR / "tmp"
@@ -124,28 +124,17 @@ def load_facts() -> list[dict]:
     return json.loads(FACTS_FILE.read_text(encoding="utf-8"))
 
 
-def load_used() -> list[str]:
-    if USED_FILE.exists():
-        return json.loads(USED_FILE.read_text(encoding="utf-8"))
-    return []
-
-
-def save_used(used: list[str]) -> None:
-    USED_FILE.write_text(json.dumps(used, ensure_ascii=False, indent=2), encoding="utf-8")
-
-
 def pick_fact_from_local() -> dict:
     """Elige un dato del banco fijo (facts_bank.json), sin repetir hasta
     agotarlo (ahí se reinicia el registro y vuelve a empezar)."""
     facts = load_facts()
-    used = load_used()
+    used = usados_db.get_used_set("facts")
     remaining = [f for f in facts if f["id"] not in used]
     if not remaining:
-        used = []
+        usados_db.clear("facts")
         remaining = facts
     fact = random.choice(remaining)
-    used.append(fact["id"])
-    save_used(used)
+    usados_db.mark_used("facts", fact["id"])
     return fact
 
 

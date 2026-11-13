@@ -3,10 +3,6 @@
 tmp/
 output/
 .config/
-used_games.json
-used_facts.json
-used_wikipedia.json
-used_trends.json
 oauth_client.json
 gdrive_secrets_RESULTADO.txt
 

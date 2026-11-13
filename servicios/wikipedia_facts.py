@@ -11,27 +11,11 @@ Lleva registro de los títulos ya usados (used_wikipedia.json) para no
 repetir el mismo artículo en videos futuros.
 """
 
-import json
-from pathlib import Path
-
 import requests
 
-from servicios import groq_client
+from servicios import groq_client, usados_db
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-USED_WIKI_FILE = BASE_DIR / "used_wikipedia.json"
 USER_AGENT = "ChicoTuf-GeneradorVideos/1.0 (uso personal)"
-MAX_TRACKED = 500
-
-
-def _load_used() -> list[str]:
-    if USED_WIKI_FILE.exists():
-        return json.loads(USED_WIKI_FILE.read_text(encoding="utf-8"))
-    return []
-
-
-def _save_used(used: list[str]) -> None:
-    USED_WIKI_FILE.write_text(json.dumps(used[-MAX_TRACKED:], ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _fetch_random_summary(lang: str = "es") -> tuple[str, str] | None:
@@ -97,7 +81,7 @@ def fetch_unused_fact(max_attempts: int = 10) -> dict | None:
     internet, etc.) para que el script principal use el banco local como
     respaldo.
     """
-    used = _load_used()
+    used = usados_db.get_used_set("wikipedia")
     for _ in range(max_attempts):
         result = _fetch_random_summary()
         if not result:
@@ -109,7 +93,6 @@ def fetch_unused_fact(max_attempts: int = 10) -> dict | None:
 
         text = _build_curious_text(title, extract) or _fallback_text(extract)
 
-        used.append(fact_id)
-        _save_used(used)
+        usados_db.mark_used("wikipedia", fact_id)
         return {"id": fact_id, "category": "general", "keywords": title, "text": text}
     return None

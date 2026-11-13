@@ -62,6 +62,14 @@ def get_rawg_api_key() -> str | None:
     return (_load().get("rawg_api_key") or "").strip() or None
 
 
+def get_sql_server_config() -> dict | None:
+    cfg = _load().get("sql_server") or {}
+    required = ("server", "database", "user", "password")
+    if not all(cfg.get(k) for k in required):
+        return None
+    return cfg
+
+
 def get_gdrive_config() -> dict | None:
     cfg = _load().get("gdrive") or {}
     required = ("folder_id", "client_id", "client_secret", "refresh_token")

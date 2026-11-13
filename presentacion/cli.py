@@ -2,8 +2,8 @@
 Capa de presentación: punto de entrada por consola (el que usa
 generar_video.bat). Elige la fuente del dato por argumento de línea de
 comandos, corre el pipeline (aplicacion/generador_pipeline.py) y, si hay
-credenciales de Google Drive configuradas, sincroniza el registro de "no
-repetir" antes y después (aplicacion/drive_sync.py).
+credenciales de Google Drive configuradas, sube el video resultante
+(aplicacion/drive_sync.py).
 
 Uso: python presentacion/cli.py [wikipedia|local|games|trending|auto] [categoria]
 
@@ -28,14 +28,11 @@ def main() -> None:
     trend_category = sys.argv[2] if len(sys.argv) > 2 else None
     try:
         service, folder_id = drive_sync.load_drive_service_from_config()
-        if service:
-            print("[+] Sincronizando registro de datos ya usados desde Google Drive...")
-            drive_sync.sync_state_from_drive(service, folder_id)
 
         out_path = generador_pipeline.main(source, trend_category)
 
         if service:
-            print("[+] Subiendo video y registro actualizado a Google Drive...")
+            print("[+] Subiendo video a Google Drive...")
             drive_sync.push_results_to_drive(service, folder_id, out_path, out_path.with_suffix(".txt"))
     except Exception as exc:
         print(f"[ERROR] {exc}", file=sys.stderr)

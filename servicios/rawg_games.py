@@ -19,33 +19,18 @@ devuelve None para que el script principal use el banco local como
 respaldo — el video nunca falla por esto.
 """
 
-import json
 import random
 from datetime import date, timedelta
 from io import BytesIO
-from pathlib import Path
 
 import requests
 from PIL import Image
 
 from datos import app_config
-from servicios import groq_client
+from servicios import groq_client, usados_db
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-USED_FILE = BASE_DIR / "used_games.json"
 API_BASE = "https://api.rawg.io/api"
 WIKI_USER_AGENT = "ChicoTuf-GeneradorVideos/1.0 (uso personal)"
-MAX_TRACKED = 500
-
-
-def _load_used() -> list[str]:
-    if USED_FILE.exists():
-        return json.loads(USED_FILE.read_text(encoding="utf-8"))
-    return []
-
-
-def _save_used(used: list[str]) -> None:
-    USED_FILE.write_text(json.dumps(used[-MAX_TRACKED:], ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _download_image(url: str) -> Image.Image | None:
@@ -207,7 +192,7 @@ def fetch_unused_game(max_attempts: int = 8) -> dict | None:
     if not api_key:
         return None
 
-    used = _load_used()
+    used = usados_db.get_used_set("games")
     for _ in range(max_attempts):
         params = {"key": api_key, "ordering": "-added", "page_size": 20}
         if random.random() < 0.5:
@@ -256,8 +241,7 @@ def fetch_unused_game(max_attempts: int = 8) -> dict | None:
             continue
 
         fact_id = f"game-{game['id']}"
-        used.append(fact_id)
-        _save_used(used)
+        usados_db.mark_used("games", fact_id)
 
         return {
             "id": fact_id,

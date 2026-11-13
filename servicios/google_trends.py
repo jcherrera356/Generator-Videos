@@ -12,18 +12,12 @@ fetch_unused_trend() devuelve None para que el script principal use el
 banco local como respaldo — el video nunca falla por esto.
 """
 
-import json
 import re
 import xml.etree.ElementTree as ET
-from pathlib import Path
 
 import requests
 
-from servicios import groq_client
-
-BASE_DIR = Path(__file__).resolve().parent.parent
-USED_FILE = BASE_DIR / "used_trends.json"
-MAX_TRACKED = 500
+from servicios import groq_client, usados_db
 
 RSS_URL = "https://trends.google.com/trending/rss"
 HT_NS = "https://trends.google.com/trending/rss"
@@ -43,16 +37,6 @@ CATEGORIES = [
     "Videojuegos", "Noticias", "Moda", "Entretenimiento", "Tecnología",
     "Deportes", "Negocios", "Salud", "Ciencia", "Otros",
 ]
-
-
-def _load_used() -> list[str]:
-    if USED_FILE.exists():
-        return json.loads(USED_FILE.read_text(encoding="utf-8"))
-    return []
-
-
-def _save_used(used: list[str]) -> None:
-    USED_FILE.write_text(json.dumps(used[-MAX_TRACKED:], ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _fetch_trending_items() -> list[dict]:
@@ -143,7 +127,7 @@ def fetch_unused_trend(max_attempts: int = 8, category: str | None = None) -> di
     if not items:
         return None
 
-    used = _load_used()
+    used = usados_db.get_used_set("trends")
     # Si se pide una categoría puntual, revisa todos los temas disponibles
     # (ya se trajeron en un solo request, no cuesta nada extra en red) en vez
     # de limitarse a los primeros max_attempts -- una categoría como "Moda"
@@ -162,8 +146,7 @@ def fetch_unused_trend(max_attempts: int = 8, category: str | None = None) -> di
         if category and item_category.strip().lower() != category.strip().lower():
             continue
 
-        used.append(term_id)
-        _save_used(used)
+        usados_db.mark_used("trends", term_id)
         return {
             "id": term_id,
             "category": "general",
