@@ -4,7 +4,7 @@ curiosos" para TikTok. Orquesta la capa de dominio (dominio/visuals.py) y
 los servicios externos (servicios/*) para producir el video final.
 
 Pipeline por cada ejecución:
-  1. Elige un dato curioso no usado del banco (facts_bank.json).
+  1. Elige un dato curioso no usado del banco fijo (tabla SQL videosApp.FactsBank).
   2. Genera narración con voz IA (edge-tts, gratuito) y captura el timing
      de cada palabra para subtítulos sincronizados.
   3. Busca fotos reales relacionadas al tema (API gratuita de Pexels) — una
@@ -26,7 +26,6 @@ la TikTok Content Posting API oficial, para no violar los Términos de Servicio.
 """
 
 import asyncio
-import json
 import random
 import re
 import subprocess
@@ -48,6 +47,7 @@ from PIL import Image, ImageEnhance, ImageFilter
 
 from dominio import visuals
 from servicios import (
+    facts_bank_db,
     google_trends,
     groq_client,
     pexels_photos,
@@ -59,7 +59,6 @@ from servicios import (
 )
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-FACTS_FILE = BASE_DIR / "facts_bank.json"
 MUSIC_DIR = BASE_DIR / "music"
 OUTPUT_DIR = BASE_DIR / "output"
 TMP_DIR = BASE_DIR / "tmp"
@@ -121,12 +120,13 @@ GRADIENT_PALETTES = [
 
 
 def load_facts() -> list[dict]:
-    return json.loads(FACTS_FILE.read_text(encoding="utf-8"))
+    return facts_bank_db.get_all_facts()
 
 
 def pick_fact_from_local() -> dict:
-    """Elige un dato del banco fijo (facts_bank.json), sin repetir hasta
-    agotarlo (ahí se reinicia el registro y vuelve a empezar)."""
+    """Elige un dato del banco fijo (tabla videosApp.FactsBank), sin
+    repetir hasta agotarlo (ahí se reinicia el registro y vuelve a
+    empezar)."""
     facts = load_facts()
     used = usados_db.get_used_set("facts")
     remaining = [f for f in facts if f["id"] not in used]

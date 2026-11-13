@@ -29,9 +29,12 @@ obliga a tocar la capa de presentación ni la de aplicación.
 | **Servicios** | `servicios/` | Adaptadores a APIs externas: `wikipedia_facts.py`, `rawg_games.py`, `google_trends.py`, `wikimedia_commons.py`, `pexels_photos.py`, `pixabay_photos.py`, `groq_client.py`, `drive_storage.py`, `sql_database.py`/`usados_db.py` (registro de "no repetir" en SQL Server) |
 | **Datos** | `datos/` | `app_config.py`, que lee/escribe el único archivo de configuración local (`.config/config.json`) |
 
-Los archivos de datos/estado (`facts_bank.json`, `.config/`, `output/`,
-`tmp/`, `music/`) quedan en la raíz del proyecto — son datos y estado en
-tiempo de ejecución, no código, así que no forman parte de las capas.
+Los archivos de datos/estado (`.config/`, `output/`, `tmp/`, `music/`)
+quedan en la raíz del proyecto — son datos y estado en tiempo de ejecución,
+no código, así que no forman parte de las capas. El banco de datos
+curiosos fijos (antes `facts_bank.json`) y el registro de "no repetir"
+viven en SQL Server, no en archivos locales (ver sección de SQL Server más
+abajo).
 
 ## Toda la configuración en un solo lugar
 
@@ -125,8 +128,8 @@ las ofrece en un menú):
 
 - `"wikipedia"` — un artículo aleatorio de la **API pública de Wikipedia**
   (sin API key). Categoría de registro: `wikipedia`.
-- `"local"` — el banco fijo `facts_bank.json` (51 datos escritos a mano).
-  Categoría: `facts` (se reinicia sola al agotarlos).
+- `"local"` — el banco fijo guardado en `videosApp.FactsBank` (51 datos
+  escritos a mano). Categoría: `facts` (se reinicia sola al agotarlos).
 - `"games"` — un videojuego al azar de la **API de RAWG**, con sus propias
   capturas de pantalla reales (ver sección de RAWG más abajo). Categoría:
   `games`.
@@ -139,23 +142,38 @@ las ofrece en un menú):
 - `"auto"` (el que usa `python presentacion\cli.py` sin argumentos, por
   `generar_video.bat`) — **50% Wikipedia / 50% banco local**, al azar.
 
-### Registro de "no repetir" (SQL Server)
+### Base de datos SQL Server (banco de datos + registro de "no repetir")
 
-Para no repetir el mismo dato/juego/artículo/tendencia en videos futuros, el
-pipeline guarda lo ya usado en una tabla `videosApp.DatosUsados` de SQL
-Server (ver `servicios/sql_database.py` y `servicios/usados_db.py`) en vez
-de archivos locales — así el registro se comparte entre todos los equipos
-que generen videos sin importar quién corra primero, sin el riesgo de que
-uno pise el progreso del otro (que sí podía pasar con archivos
-sincronizados por Drive). El schema `videosApp` agrupa las tablas de este
-proyecto dentro de la base de datos, separadas de otras apps que vivan en
-el mismo server compartido.
+Dos tablas en el schema `videosApp` (lo agrupa aparte de otras apps que
+vivan en el mismo server compartido):
 
-Crea el schema y la tabla una sola vez:
+- **`videosApp.FactsBank`** — el banco fijo de datos curiosos (reemplaza
+  `facts_bank.json`). Se agrega/edita directo en la base de datos, sin
+  tocar código ni hacer commit. Ver `servicios/facts_bank_db.py`.
+- **`videosApp.DatosUsados`** — el registro de "no repetir" para las 4
+  fuentes (reemplaza los antiguos `used_*.json` + Google Drive, que podían
+  perder datos si dos equipos generaban video casi al mismo tiempo y uno
+  pisaba el progreso del otro). Ver `servicios/usados_db.py`.
+
+**A propósito, sin respaldo local:** si no hay conexión a SQL (sin
+credenciales, sin internet, el server gratuito de somee.com caído, etc.),
+el video **no se genera** — se corta con un mensaje de error claro, en vez
+de seguir en silencio sin poder leer el banco de datos o registrar lo ya
+usado (y arriesgar repetir algo).
+
+Crea el schema y las tablas una sola vez:
 
 ```sql
 CREATE SCHEMA videosApp;
 GO
+
+CREATE TABLE videosApp.FactsBank (
+    id NVARCHAR(150) NOT NULL PRIMARY KEY,
+    category NVARCHAR(50) NOT NULL,
+    keywords NVARCHAR(300) NOT NULL,
+    texto NVARCHAR(MAX) NOT NULL,
+    fecha_agregado DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
+)
 
 CREATE TABLE videosApp.DatosUsados (
     id INT IDENTITY(1,1) PRIMARY KEY,
@@ -167,12 +185,14 @@ CREATE TABLE videosApp.DatosUsados (
 ```
 
 Y agrega las credenciales en `.config/config.json` (ver `"sql_server"` más
-arriba). Si no están configuradas, o el servidor no responde, el pipeline
-sigue generando video igual — simplemente esa corrida no filtra repetidos.
+arriba).
 
-Las cuatro fuentes caen automáticamente al banco local si fallan (sin
-internet, sin API key configurada, sin resultados nuevos tras varios
-intentos, etc.) — el video nunca falla por esto. Puedes ajustar la
+Las fuentes externas (Wikipedia/RAWG/Trends) siguen cayendo al banco local
+(`"local"`) si fallan (sin internet, sin API key configurada, sin resultados
+nuevos tras varios intentos, etc.) — eso nunca tumba el video. La única
+dependencia dura es SQL Server: sin conexión a la base de datos no hay
+banco local al cual caer, así que el video se corta ahí (ver nota de arriba).
+Puedes ajustar la
 proporción de `"auto"` cambiando `WIKIPEDIA_PROBABILITY` en
 `aplicacion/generador_pipeline.py`. Los datos de Wikipedia y de tendencias
 usan la categoría `general` para el ícono de respaldo (ver
@@ -262,10 +282,24 @@ Para configurar/cambiar la API key de Groq, edita `.config/config.json` (ver
 
 ## Agregar más datos curiosos
 
-Edita `facts_bank.json` y agrega objetos con este formato:
+Se agregan directo en la tabla `videosApp.FactsBank` (SQL Server) — ya no
+hace falta editar ningún archivo ni hacer commit. Desde Python:
 
-```json
-{"id": "identificador-unico", "category": "espacio", "keywords": "night sky stars", "text": "El dato curioso redactado en un par de frases."}
+```python
+from servicios import facts_bank_db
+facts_bank_db.add_fact(
+    id_="identificador-unico",
+    category="espacio",
+    keywords="night sky stars",
+    text="El dato curioso redactado en un par de frases.",
+)
+```
+
+O directo en SQL:
+
+```sql
+INSERT INTO videosApp.FactsBank (id, category, keywords, texto)
+VALUES ('identificador-unico', 'espacio', 'night sky stars', 'El dato curioso redactado en un par de frases.')
 ```
 
 - `category` decide qué ícono ilustrado aparece si no se consigue una foto
@@ -359,10 +393,13 @@ ocasional. Todo esto vive en `dominio/visuals.py`.
   `aplicacion/generador_pipeline.py` (`CHAR_CARD_W` / `CHAR_CARD_H` en
   `dominio/visuals.py` para sus proporciones).
 
-Nota: `visuals.py` y `facts_bank.json` también existen (copiados) en
-`..\avatar-live\`, porque el avatar en vivo usa el mismo personaje. Si
-cambias el diseño del personaje o agregas datos curiosos aquí, copia los
-mismos cambios allá si quieres que se reflejen también en el directo.
+Nota: `visuals.py` también existe (copiado) en `..\avatar-live\`, porque el
+avatar en vivo usa el mismo personaje. Si cambias el diseño del personaje
+aquí, copia los mismos cambios allá si quieres que se reflejen también en
+el directo. `facts_bank.json` ya no existe en este repo (los datos viven
+en `videosApp.FactsBank`, ver arriba) — si `avatar-live` todavía depende de
+su propia copia de ese archivo, revisa si sigue sirviéndole tal cual o si
+conviene que lea de la misma base de datos.
 
 ## Agregar música de fondo (opcional)
 
