@@ -31,8 +31,8 @@ def add_fact(id_: str, category: str, keywords: str, text: str) -> None:
     try:
         cur = cn.cursor()
         cur.execute(
-            "INSERT INTO videosApp.FactsBank (id, category, keywords, texto) VALUES (?, ?, ?, ?)",
-            id_, category, keywords, text,
+            "INSERT INTO videosApp.FactsBank (id, category, keywords, texto) VALUES (%s, %s, %s, %s)",
+            (id_, category, keywords, text),
         )
         cn.commit()
     finally:

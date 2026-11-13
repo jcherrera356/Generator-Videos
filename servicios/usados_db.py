@@ -16,7 +16,7 @@ RuntimeError y el video NO se genera -- es mejor avisar claramente que
 generar un video sin poder registrar que ya se usó (arriesgando repetirlo).
 """
 
-import pyodbc
+import pymssql
 
 from servicios import sql_database
 
@@ -25,7 +25,7 @@ def get_used_set(categoria: str) -> set[str]:
     cn = sql_database.get_connection_required()
     try:
         cur = cn.cursor()
-        cur.execute("SELECT clave FROM videosApp.DatosUsados WHERE categoria = ?", categoria)
+        cur.execute("SELECT clave FROM videosApp.DatosUsados WHERE categoria = %s", (categoria,))
         return {row[0] for row in cur.fetchall()}
     finally:
         cn.close()
@@ -37,7 +37,7 @@ def clear(categoria: str) -> None:
     cn = sql_database.get_connection_required()
     try:
         cur = cn.cursor()
-        cur.execute("DELETE FROM videosApp.DatosUsados WHERE categoria = ?", categoria)
+        cur.execute("DELETE FROM videosApp.DatosUsados WHERE categoria = %s", (categoria,))
         cn.commit()
     finally:
         cn.close()
@@ -48,11 +48,11 @@ def mark_used(categoria: str, clave: str) -> None:
     try:
         cur = cn.cursor()
         cur.execute(
-            "INSERT INTO videosApp.DatosUsados (categoria, clave) VALUES (?, ?)",
-            categoria, clave,
+            "INSERT INTO videosApp.DatosUsados (categoria, clave) VALUES (%s, %s)",
+            (categoria, clave),
         )
         cn.commit()
-    except pyodbc.IntegrityError:
+    except pymssql.IntegrityError:
         pass  # ya estaba marcada (otra corrida la insertó primero) -- no es un error
     finally:
         cn.close()

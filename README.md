@@ -96,6 +96,53 @@ script sigue funcionando igual, 100% local, sin tocar Drive.
 (El registro de "no repetir" ya no pasa por Drive — ver la sección de SQL
 Server más abajo.)
 
+### Desplegar en Streamlit Cloud (opcional)
+
+`presentacion/app.py` es la misma app con cuatro botones (uno por fuente)
+que corre en la nube gratis vía [Streamlit Community Cloud](https://share.streamlit.io/).
+
+1. Sube el repo a GitHub (ya lo tienes ahí).
+2. En Streamlit Cloud, crea una app nueva apuntando a este repo, con **"Main
+   file path"** = `presentacion/app.py`.
+3. En **Settings → Secrets**, pega (con tus propios valores):
+
+```toml
+[sql_server]
+server = "..."
+database = "..."
+user = "..."
+password = "..."
+
+[pexels]
+api_key = "..."
+
+[pixabay]
+api_key = "..."
+
+[groq]
+api_key = "..."
+
+[rawg]
+api_key = "..."
+
+[gdrive]
+folder_id = "..."
+client_id = "..."
+client_secret = "..."
+refresh_token = "..."
+```
+
+`[sql_server]` es obligatorio (sin conexión a la base de datos la app no
+genera ningún video, ver sección de SQL Server más abajo). Las demás
+secciones son opcionales, igual que en `.config/config.json` local.
+
+Nota técnica: la app usa `pymssql` para conectarse a SQL Server (no
+`pyodbc`) porque el contenedor gratuito de Streamlit Cloud no permite
+instalar el driver ODBC propietario de Microsoft — `pymssql` trae su propio
+driver (FreeTDS) empaquetado, sin depender de nada a nivel de sistema
+operativo más allá de `ffmpeg` (instalado automáticamente desde
+`packages.txt`).
+
 **Para configurarlo** (una sola vez):
 
 1. En https://console.cloud.google.com/ crea un proyecto (o usa uno
