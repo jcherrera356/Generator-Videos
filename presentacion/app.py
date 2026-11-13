@@ -112,13 +112,13 @@ if not HAS_DRIVE:
     st.info("Sin secrets de `[gdrive]` configurados: el video se queda solo para descargar aquí, no se sube a Drive.")
 
 
-def _generate_and_upload(source: str, trend_category: str | None = None) -> None:
+def _generate_and_upload(source: str, trend_category: str | None = None, fact_id: str | None = None) -> None:
     try:
         service, folder_id = drive_sync.load_drive_service_from_config() if HAS_DRIVE else (None, None)
 
         with st.status("Generando video...", expanded=True) as status:
             st.write("Eligiendo dato, generando voz, fotos y personaje animado (1-3 min)...")
-            out_path = generador_pipeline.main(source=source, trend_category=trend_category)
+            out_path = generador_pipeline.main(source=source, trend_category=trend_category, fact_id=fact_id)
             caption_path = out_path.with_suffix(".txt")
 
             if service:
@@ -149,7 +149,19 @@ with col1:
     wiki_clicked = st.button("Generar con Wikipedia", type="primary", use_container_width=True)
 with col2:
     st.subheader("Desde el banco local")
-    st.caption("Un dato elegido del banco fijo en SQL (sin repetir).")
+    st.caption("Elige un dato puntual de `[Pruebaa].[videosApp].[FactsBank]` o deja \"Al azar\".")
+    try:
+        unused_facts = generador_pipeline.list_unused_local_facts()
+    except sql_database.ErrorConexionSQL:
+        unused_facts = []
+        st.warning("No se pudo leer el banco local ahora mismo.")
+    AL_AZAR = "Al azar"
+    fact_options = [AL_AZAR] + [f["id"] for f in unused_facts]
+    fact_labels = {AL_AZAR: AL_AZAR}
+    fact_labels.update({f["id"]: f"[{f['category']}] {f['text'][:55]}..." for f in unused_facts})
+    local_fact_choice = st.selectbox(
+        "Dato", fact_options, format_func=lambda x: fact_labels[x], label_visibility="collapsed"
+    )
     local_clicked = st.button("Generar con banco local", type="secondary", use_container_width=True)
 with col3:
     st.subheader("Videojuegos")
@@ -166,7 +178,8 @@ with col4:
 if wiki_clicked:
     _generate_and_upload(source="wikipedia")
 elif local_clicked:
-    _generate_and_upload(source="local")
+    chosen_id = None if local_fact_choice == AL_AZAR else local_fact_choice
+    _generate_and_upload(source="local", fact_id=chosen_id)
 elif games_clicked:
     _generate_and_upload(source="games")
 elif trending_clicked:

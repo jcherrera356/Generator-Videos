@@ -123,11 +123,28 @@ def load_facts() -> list[dict]:
     return facts_bank_db.get_all_facts()
 
 
-def pick_fact_from_local() -> dict:
-    """Elige un dato del banco fijo (tabla videosApp.FactsBank), sin
-    repetir hasta agotarlo (ahí se reinicia el registro y vuelve a
-    empezar)."""
+def list_unused_local_facts() -> list[dict]:
+    """Datos del banco fijo que todavía no se han usado -- para dejar
+    elegir uno puntual (en vez de al azar) desde presentacion/app.py."""
     facts = load_facts()
+    used = usados_db.get_used_set("facts")
+    remaining = [f for f in facts if f["id"] not in used]
+    return remaining if remaining else facts
+
+
+def pick_fact_from_local(fact_id: str | None = None) -> dict:
+    """Elige un dato del banco fijo (tabla videosApp.FactsBank). Sin
+    `fact_id`, elige al azar sin repetir hasta agotarlo (ahí se reinicia el
+    registro y vuelve a empezar). Con `fact_id`, usa ese dato puntual
+    (elegido a mano desde la app), sin importar si ya se había usado antes."""
+    facts = load_facts()
+    if fact_id is not None:
+        fact = next((f for f in facts if f["id"] == fact_id), None)
+        if fact is None:
+            raise ValueError(f"No existe ningún dato con id {fact_id!r} en el banco local")
+        usados_db.mark_used("facts", fact["id"])
+        return fact
+
     used = usados_db.get_used_set("facts")
     remaining = [f for f in facts if f["id"] not in used]
     if not remaining:
@@ -175,13 +192,15 @@ def pick_fact_from_trending(category: str | None = None) -> dict:
     return pick_fact_from_local()
 
 
-def pick_fact(source: str = "auto", trend_category: str | None = None) -> dict:
+def pick_fact(source: str = "auto", trend_category: str | None = None, fact_id: str | None = None) -> dict:
     """source: "wikipedia" (siempre Wikipedia, con respaldo al banco local
     si falla), "local" (siempre el banco fijo), "games" (siempre RAWG, con
     el mismo respaldo), "trending" (siempre Google Trends, con el mismo
     respaldo), o "auto" (por defecto: al azar entre Wikipedia y local según
     WIKIPEDIA_PROBABILITY, como antes). `trend_category` solo aplica con
-    source="trending" (ver google_trends.CATEGORIES)."""
+    source="trending" (ver google_trends.CATEGORIES). `fact_id` solo aplica
+    con source="local": si se da, usa ese dato puntual en vez de uno al
+    azar (ver pick_fact_from_local)."""
     if source == "wikipedia":
         return pick_fact_from_wikipedia()
     if source == "games":
@@ -189,7 +208,7 @@ def pick_fact(source: str = "auto", trend_category: str | None = None) -> dict:
     if source == "trending":
         return pick_fact_from_trending(trend_category)
     if source == "local":
-        return pick_fact_from_local()
+        return pick_fact_from_local(fact_id)
 
     if random.random() < WIKIPEDIA_PROBABILITY:
         return pick_fact_from_wikipedia()
@@ -657,15 +676,16 @@ def fetch_real_photos(topic: str, count: int, fact: dict) -> list[Image.Image]:
     return photos
 
 
-def main(source: str = "auto", trend_category: str | None = None) -> Path:
+def main(source: str = "auto", trend_category: str | None = None, fact_id: str | None = None) -> Path:
     """source: "wikipedia", "local", "games", "trending", o "auto" (mitad y
     mitad entre Wikipedia y local) — ver pick_fact(). `trend_category` solo
-    aplica con source="trending" (ver google_trends.CATEGORIES)."""
+    aplica con source="trending" (ver google_trends.CATEGORIES). `fact_id`
+    solo aplica con source="local" (ver pick_fact_from_local)."""
     OUTPUT_DIR.mkdir(exist_ok=True)
     TMP_DIR.mkdir(exist_ok=True)
     MUSIC_DIR.mkdir(exist_ok=True)
 
-    fact = pick_fact(source, trend_category)
+    fact = pick_fact(source, trend_category, fact_id)
     intro = random.choice(INTRO_PHRASES)
     outro = random.choice(OUTRO_PHRASES)
     fact["text"] = trim_to_duration_budget(fact["text"], intro, outro)
